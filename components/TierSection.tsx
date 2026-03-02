@@ -65,12 +65,12 @@ export function TierSection({
   const safeItems = items ?? [];
 
   return (
-    <section className="space-y-3">
-      {/* Header */}
-      <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur">
+    <section className="space-y-4">
+      {/* Header (panel style like v1) */}
+      <div className="panel p-5">
         <div className="flex items-end justify-between gap-4">
           <div className="flex items-start gap-3">
-            <div className={["mt-1 h-10 w-1.5 rounded-full", meta.accentBar].join(" ")} />
+            <div className={["mt-1 h-9 w-1.5 rounded-full", meta.accentBar].join(" ")} />
 
             <div>
               <div className="text-xs font-semibold tracking-widest">
@@ -93,21 +93,19 @@ export function TierSection({
             </div>
           </div>
 
-          <div className="text-xs text-white/55">
+          <div className="text-xs font-semibold text-white/45">
             {safeItems.length} cit{safeItems.length === 1 ? "y" : "ies"}
           </div>
         </div>
       </div>
 
       {safeItems.length === 0 ? (
-        <div className="rounded-3xl border border-white/10 bg-black/25 p-5 text-sm text-white/80 shadow-[0_16px_50px_rgba(0,0,0,0.28)] backdrop-blur">
+        <div className="panel p-5 text-sm text-white/70">
           No cities match your filters.{" "}
-          <span className="text-white/60">
-            Try raising your budget or lowering cost sensitivity.
-          </span>
+          <span className="text-white/55">Try raising your budget or lowering cost sensitivity.</span>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {safeItems.map((it) => (
             <CityCard key={it.city.id} it={it} onClick={() => onSelect(it)} />
           ))}
@@ -140,47 +138,38 @@ function CityCard({ it, onClick }: { it: ScoredCity; onClick: () => void }) {
       type="button"
       onClick={onClick}
       title={title || "City details"}
-      className="relative rounded-3xl border border-white/10 bg-white/[0.03] p-4 text-left shadow-[0_16px_50px_rgba(0,0,0,0.28)] backdrop-blur transition hover:-translate-y-[1px] hover:border-white/15 hover:bg-white/[0.05]"
+      className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 text-left backdrop-blur shadow-[0_18px_60px_rgba(0,0,0,0.28)] transition hover:-translate-y-[1px] hover:border-white/15 hover:bg-white/[0.06]"
     >
-      <span className="absolute right-3 top-3 rounded-full border border-white/10 bg-black/30 px-2 py-0.5 text-[11px] font-semibold text-white/85">
-        {Math.round(score)}
-      </span>
-
-      <div className="pr-12">
-        <div className="text-base font-semibold leading-tight text-white/90">
-          {it.city.name}
-        </div>
-        <div className="mt-1 text-sm text-white/55">{it.city.country}</div>
-
-        <div className="mt-2 text-xs text-white/65">
-          Total: <span className="font-semibold text-white/85">{score.toFixed(1)}</span>
-          <span className="text-white/35"> · </span>
-          <span className="text-white/65">{it.city.region}</span>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-base font-semibold text-white/90">{it.city.name}</div>
+          <div className="truncate text-sm text-white/65">{it.city.country}</div>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
-          {drivers.length > 0
-            ? drivers.map((d) => (
-                <span
-                  key={d.key}
-                  className="rounded-full border border-white/10 bg-black/25 px-2 py-0.5 text-[11px] font-medium text-white/75"
-                >
-                  <span className="text-emerald-200/90">{d.label}</span> ·{" "}
-                  {Number.isFinite(d.points) ? d.points.toFixed(1) : "0.0"} pts
-                </span>
-              ))
-            : highlights.slice(0, 2).map((h) => (
-                <span
-                  key={h}
-                  className="rounded-full border border-white/10 bg-black/25 px-2 py-0.5 text-[11px] text-white/75"
-                >
-                  <span className="text-emerald-200/90">{h}</span>
-                </span>
-              ))}
-        </div>
+        <span className="shrink-0 rounded-full border border-white/10 bg-black/30 px-2.5 py-1 text-[11px] font-semibold text-white/85">
+          {Math.round(score)}
+        </span>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {drivers.length > 0
+          ? drivers.map((d) => (
+              <span
+                key={d.key}
+                className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-xs text-white/75"
+              >
+                <span className="text-emerald-200/90">{d.label}</span>
+              </span>
+            ))
+          : highlights.slice(0, 2).map((h) => (
+              <span
+                key={h}
+                className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-xs text-white/75"
+              >
+                {h}
+              </span>
+            ))}
       </div>
     </button>
   );
 }
-
-

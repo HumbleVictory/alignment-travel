@@ -101,7 +101,9 @@ export default function SetupPage() {
   }, [hydrated, profileId, month, budgetUsd, weights]);
 
   const profile = useMemo(() => {
-    return (((PROFILES as any[]).find((p) => p?.id === profileId) ?? (PROFILES as any[])[0]) as any) ?? null;
+    return (
+      (((PROFILES as any[]).find((p) => p?.id === profileId) ?? (PROFILES as any[])[0]) as any) ?? null
+    );
   }, [profileId]);
 
   const isCustom = profileId === "custom";
@@ -119,7 +121,11 @@ export default function SetupPage() {
       100
     );
     const food = clamp(Math.round(0.55 * nOr(wp.diningValue, 50) + 0.45 * nOr(wp.culinaryDensity, 50)), 0, 100);
-    const culture = clamp(Math.round(0.65 * nOr(wp.culinaryDensity, 50) + 0.35 * nOr(wp.safetyTransit, 50)), 0, 100);
+    const culture = clamp(
+      Math.round(0.65 * nOr(wp.culinaryDensity, 50) + 0.35 * nOr(wp.safetyTransit, 50)),
+      0,
+      100
+    );
     const comfort = clamp(Math.round(0.6 * nOr(wp.hotel, 50) + 0.4 * nOr(wp.safetyTransit, 50)), 0, 100);
     const nightlife = clamp(Math.round(0.7 * nOr(wp.diningValue, 50) + 0.3 * nOr(wp.shopping, 50)), 0, 100);
 
@@ -141,10 +147,11 @@ export default function SetupPage() {
         <div className="shell p-6 md:p-8">
           <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <div className="text-xs font-medium tracking-wide text-emerald-200/80">SETUP</div>
+              <div className="text-xs font-medium tracking-wide text-emerald-200/80">Preferences</div>
               <H1 className="mt-2 text-3xl md:text-4xl">Build your priorities</H1>
               <P className="mt-3">
-                Choose a profile (or <span className="font-semibold text-white/85">Custom</span>), set a budget, then tune what matters.
+                Choose a profile (or <span className="font-semibold text-white/85">Custom</span>), set a budget, or tune
+                what matters.
               </P>
             </div>
 
@@ -217,7 +224,8 @@ export default function SetupPage() {
                 </Link>
 
                 <div className="text-xs text-white/55">
-                  Rankings use an <span className="font-semibold text-white/75">Alignment Score</span> with transparent tradeoffs.
+                  Rankings use an <span className="font-semibold text-white/75">Alignment Score</span> with transparent
+                  tradeoffs.
                 </div>
               </div>
             </section>
@@ -229,11 +237,13 @@ export default function SetupPage() {
                   <div className="mt-1 text-xs text-white/60">
                     {isCustom ? (
                       <>
-                        You’re in <span className="font-semibold text-white/80">Custom</span>. These sliders directly affect rankings.
+                        You’re in <span className="font-semibold text-white/80">Custom</span>. These sliders directly
+                        affect rankings.
                       </>
                     ) : (
                       <>
-                        Using profile defaults. Switch to <span className="font-semibold text-white/80">Custom</span> to edit weights.
+                        Using profile defaults. Switch to <span className="font-semibold text-white/80">Custom</span> to
+                        edit weights.
                       </>
                     )}
                   </div>
@@ -259,6 +269,23 @@ export default function SetupPage() {
                 ).map(({ key, label }) => {
                   const v = weights[key];
 
+                  const expl =
+                    key === "food"
+                      ? "Restaurant density, dining value, cuisine quality, and related indicators."
+                      : key === "culture"
+                      ? "Museums, historic sites, landmarks, and related indicators."
+                      : key === "nightlife"
+                      ? "Late-night venues, bar scene strength, social energy, and related indicators."
+                      : key === "comfort"
+                      ? "Transportation ease, airport efficiency, hotel quality, and related indicators."
+                      : key === "safety"
+                      ? "Public safety, transit reliability, walkability, and related indicators."
+                      : key === "shopping"
+                      ? "Retail variety, brand presence, accessibility, and related indicators."
+                      : key === "weather"
+                      ? "Seasonal comfort, climate stability, travel conditions, and related indicators."
+                      : null;
+
                   return (
                     <div key={key} className="rounded-2xl border border-white/10 bg-black/20 p-4">
                       <div className="flex items-center justify-between">
@@ -266,10 +293,14 @@ export default function SetupPage() {
                         <div className="text-sm font-semibold text-white/80">{v}</div>
                       </div>
 
+                      {/* Explanations (match the “blue-circled” style) */}
+                      {expl ? <div className="mt-1 text-[11px] text-white/60">{expl}</div> : null}
+
                       {key === "cost" ? (
                         <div className="mt-1 text-[11px] text-white/60">
-                          <span className="font-semibold text-white/75">Low</span> = optimize experience even if pricier ·{" "}
-                          <span className="font-semibold text-white/75">High</span> = prioritize value; expensive cities score lower
+                          <span className="font-semibold text-white/75">Low</span> = optimize experience even if
+                          pricier · <span className="font-semibold text-white/75">High</span> = prioritize value;
+                          expensive cities score lower
                         </div>
                       ) : null}
 
@@ -289,7 +320,9 @@ export default function SetupPage() {
                           const next = clamp(parseInt(e.target.value, 10), 0, 100);
                           setWeights((prev) => ({ ...prev, [key]: next }));
                         }}
-                        className={["mt-3 w-full", isCustom ? "accent-emerald-500" : "opacity-60 cursor-not-allowed"].join(" ")}
+                        className={["mt-3 w-full", isCustom ? "accent-emerald-500" : "opacity-60 cursor-not-allowed"].join(
+                          " "
+                        )}
                       />
 
                       <div className="mt-2 text-[11px] text-white/50">

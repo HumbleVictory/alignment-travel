@@ -81,8 +81,7 @@ function BudgetBadge({
       ? Math.round(Math.abs(deltaUsd))
       : null;
 
-  const sub =
-    num == null ? "" : isWithin ? `±$${num}` : `${isOver ? "+" : "-"}$${num}`;
+  const sub = num == null ? "" : isWithin ? `±$${num}` : `${isOver ? "+" : "-"}$${num}`;
 
   return (
     <span
@@ -114,7 +113,7 @@ export function TierBoard({
   selectedId?: string | null;
 }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {TIER_ORDER.map((tier) => {
         const list = tiers[tier] ?? [];
         if (!list.length) return null;
@@ -122,25 +121,31 @@ export function TierBoard({
         const meta = TIER_META[tier];
 
         return (
-          <section key={tier} className="paper-muted rounded-2xl border paper-border">
-            <div className="flex items-center gap-3 px-4 py-3">
-              <div className={cx("h-8 w-1.5 rounded-full", meta.accentBar)} />
-              <div className="flex items-center gap-2">
+          <section key={tier} className="panel p-5">
+            {/* Tier header (matches v1 panel language) */}
+            <div className="flex items-center gap-3">
+              <div className={cx("h-9 w-1.5 rounded-full", meta.accentBar)} />
+
+              <div className="flex min-w-0 items-center gap-2">
                 <span
                   className={cx(
-                    "rounded-full px-3 py-1 text-sm font-semibold",
+                    "shrink-0 rounded-full px-3 py-1 text-sm font-semibold",
                     meta.tierPillBg,
                     meta.tierPillText
                   )}
                 >
                   {meta.label}
                 </span>
-                <span className="text-sm text-white/70">{meta.subtitle}</span>
+                <span className="truncate text-sm text-white/70">{meta.subtitle}</span>
               </div>
-              <div className="ml-auto text-xs text-white/50">{list.length}</div>
+
+              <div className="ml-auto text-xs font-semibold text-white/45">
+                {list.length}
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
+            {/* Cards grid */}
+            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               {list.map((sc) => {
                 const city = sc.city;
                 const isPinned = pinnedIds.includes(city.id);
@@ -159,18 +164,21 @@ export function TierBoard({
                       }
                     }}
                     className={cx(
-                      "paper-card border paper-border group relative w-[min(440px,100%)] rounded-2xl p-3 text-left",
-                      "transition-transform duration-200 hover:-translate-y-[1px] hover:shadow-lg",
+                      // v1-style card language
+                      "rounded-3xl border border-white/10 bg-white/[0.04] backdrop-blur p-4 text-left",
+                      "shadow-[0_18px_60px_rgba(0,0,0,0.28)]",
+                      "transition hover:-translate-y-[1px] hover:border-white/15 hover:bg-white/[0.06]",
                       "focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
                       isSelected && "ring-2 ring-white/25"
                     )}
                   >
+                    {/* top row */}
                     <div className="flex items-start gap-3">
                       <div className="min-w-0">
-                        <div className="truncate text-base font-semibold text-white">
+                        <div className="truncate text-base font-semibold text-white/90">
                           {city.name}
                         </div>
-                        <div className="truncate text-sm text-white/70">
+                        <div className="truncate text-sm text-white/65">
                           {city.country}
                         </div>
                       </div>
@@ -199,6 +207,7 @@ export function TierBoard({
                       </div>
                     </div>
 
+                    {/* score + rail */}
                     <div className="mt-3 flex items-center justify-between">
                       <div className="text-sm text-white/70">
                         Score{" "}
@@ -206,20 +215,24 @@ export function TierBoard({
                           {Math.round(sc.totalScore)}
                         </span>
                       </div>
-                      <div className={cx("h-1.5 w-24 rounded-full", meta.railTint)}>
+
+                      <div className={cx("h-1.5 w-28 rounded-full", meta.railTint)}>
                         <div
                           className={cx("h-1.5 rounded-full", meta.accentBar)}
-                          style={{ width: `${Math.max(2, Math.min(100, sc.totalScore))}%` }}
+                          style={{
+                            width: `${Math.max(2, Math.min(100, sc.totalScore))}%`,
+                          }}
                         />
                       </div>
                     </div>
 
+                    {/* highlights */}
                     {sc.highlights?.length ? (
                       <div className="mt-3 flex flex-wrap gap-1.5">
                         {sc.highlights.slice(0, 3).map((h) => (
                           <span
                             key={h}
-                            className="rounded-full bg-white/10 px-2 py-1 text-xs text-white/80"
+                            className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-xs text-white/75"
                           >
                             {h}
                           </span>

@@ -26,7 +26,13 @@ export default function PhilosophyPage() {
           <TopTabs />
 
           <div className="mt-6 max-w-3xl">
-            <H1 className="headline-fix">Philosophy</H1>
+            {/* Added micro-label for consistency */}
+            <div className="text-xs font-medium tracking-wide text-emerald-200/80">
+              PHILOSOPHY
+            </div>
+
+            <H1 className="headline-fix mt-2">Philosophy</H1>
+
             <P className="mt-4">
               Alignment Travel is built on one rule: if you can’t explain the ranking,
               you don’t deserve to trust it.

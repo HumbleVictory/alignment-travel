@@ -35,8 +35,7 @@ export default function HomePage() {
           <div className="max-w-3xl">
             <H1>Destination ranking that feels auditable.</H1>
             <P className="mt-4">
-              Alignment Travel is a decision-intelligence layer: you set priorities, the system ranks cities with explicit
-              contribution math — no black box, no vibes-only recommendations.
+              Rank cities by what matters to you — with transparent scoring.
             </P>
 
             <div className="mt-6 flex flex-wrap gap-3">
