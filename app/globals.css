@@ -1,0 +1,39 @@
+﻿/* app/globals.css */
+@import "tailwindcss";
+
+/* global rendering polish */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+}
+
+/* headline spacing fix */
+.headline-fix {
+  letter-spacing: -0.02em;
+  line-height: 0.95;
+  text-wrap: balance;
+}
+
+.subhead-fix {
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+
+/* website framing */
+.shell {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 28px;
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: 0 30px 120px rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(10px);
+}
+
+.panel {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.04);
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(10px);
+}
