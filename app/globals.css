@@ -6,6 +6,17 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: geometricPrecision;
+
+  /* “Maserati” feel: slightly smoother anchor/page scroll */
+  scroll-behavior: smooth;
+
+  /* keep layout stable when scrollbars appear */
+  scrollbar-gutter: stable;
+}
+
+body {
+  /* prevents rubber-band from feeling messy under overlays */
+  overscroll-behavior-y: none;
 }
 
 /* headline spacing fix */
@@ -36,4 +47,21 @@ html {
   background: rgba(255, 255, 255, 0.04);
   box-shadow: 0 20px 80px rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(10px);
+}
+
+/* subtle premium scrollbar (kept neutral) */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  border: 3px solid rgba(0, 0, 0, 0.0);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.20);
+  border: 3px solid rgba(0, 0, 0, 0.0);
+  background-clip: padding-box;
 }

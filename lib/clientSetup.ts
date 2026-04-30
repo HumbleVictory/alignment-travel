@@ -8,8 +8,6 @@ export type SetupWeights = {
   nightlife: number;
   safety: number;
   shopping: number;
-
-  // ✅ NEW
   weather: number;
   crowds: number;
 };
@@ -18,16 +16,19 @@ export type SetupState = {
   profileId: SetupProfileId;
   month: string;
   budgetUsd: number;
+
+  // ✅ NEW (Configurator step)
+  days: number;
+
   weights: SetupWeights;
 };
 
-const LS_KEY = "alignmentTravel:setup:v3";
+const LS_KEY = "alignmentTravel:setup:v4";
 
 function clamp(n: number, lo: number, hi: number) {
   if (!Number.isFinite(n)) return lo;
   return Math.max(lo, Math.min(hi, n));
 }
-
 function nOr(n: unknown, fallback: number) {
   return typeof n === "number" && Number.isFinite(n) ? n : fallback;
 }
@@ -36,6 +37,7 @@ export const DEFAULT_SETUP: SetupState = {
   profileId: "balanced",
   month: "January",
   budgetUsd: 2500,
+  days: 5,
   weights: {
     cost: 50,
     comfort: 50,
@@ -43,8 +45,6 @@ export const DEFAULT_SETUP: SetupState = {
     nightlife: 50,
     safety: 50,
     shopping: 50,
-
-    // ✅ NEW defaults
     weather: 50,
     crowds: 50,
   },
@@ -58,8 +58,6 @@ function sanitizeWeights(raw: any): SetupWeights {
     nightlife: clamp(nOr(raw?.nightlife, DEFAULT_SETUP.weights.nightlife), 0, 100),
     safety: clamp(nOr(raw?.safety, DEFAULT_SETUP.weights.safety), 0, 100),
     shopping: clamp(nOr(raw?.shopping, DEFAULT_SETUP.weights.shopping), 0, 100),
-
-    // ✅ NEW
     weather: clamp(nOr(raw?.weather, DEFAULT_SETUP.weights.weather), 0, 100),
     crowds: clamp(nOr(raw?.crowds, DEFAULT_SETUP.weights.crowds), 0, 100),
   };
@@ -70,10 +68,14 @@ function sanitizeSetup(raw: any): SetupState {
   const month = typeof raw?.month === "string" ? raw.month : DEFAULT_SETUP.month;
   const budgetUsd = clamp(nOr(raw?.budgetUsd, DEFAULT_SETUP.budgetUsd), 0, 1_000_000);
 
+  // ✅ tolerate older saved states that don’t have days
+  const days = clamp(nOr(raw?.days, DEFAULT_SETUP.days), 1, 60);
+
   return {
     profileId,
     month,
     budgetUsd,
+    days,
     weights: sanitizeWeights(raw?.weights),
   };
 }
@@ -96,6 +98,11 @@ export function saveSetup(next: SetupState) {
   } catch {
     // ignore
   }
+}
+
+export function patchSetup(patch: Partial<SetupState>) {
+  const curr = loadSetup();
+  saveSetup({ ...curr, ...patch, weights: patch.weights ?? curr.weights });
 }
 
 export function resetSetup() {

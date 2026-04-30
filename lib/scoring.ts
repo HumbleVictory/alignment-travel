@@ -3,6 +3,7 @@
 // Internally we normalize by total weight only for computing a 0..100 totalScore.
 
 export type Tier = "S" | "A" | "B" | "C" | "D";
+export type PersonalFeedback = "love" | "maybe" | "pass";
 
 export type DriverKey =
   | "flight"
@@ -31,7 +32,11 @@ export type Explain = {
   coverage: Record<DriverKey, 0 | 1>;
   confidence: number; // 0..1
   penalties: ExplainPenalty[];
-  familiarityAdj: number; // +/- points applied
+
+  // Personalization
+  familiarityAdj: number; // visit-history adjustment
+  feedbackAdj: number; // love/maybe/pass adjustment
+  personalizationAdj: number; // capped final personalization adjustment
 };
 
 export type City = {
@@ -118,7 +123,12 @@ export type ScoreOptions = {
   fineDiningNights?: number;
   hotelStarFocus?: 4 | 5;
 
-  // country-level familiarity
+  // city-level personalization
+  visitedByCity?: Record<string, boolean>;
+  tripsByCity?: Record<string, number>;
+  feedbackByCity?: Record<string, PersonalFeedback | undefined>;
+
+  // Back-compat country-level familiarity
   visitedByCountry?: Record<string, boolean>;
   tripsByCountry?: Record<string, number>;
 
@@ -507,18 +517,36 @@ export function scoreCities(cities: City[], profile: Profile, options?: ScoreOpt
       });
     }
 
-    // Familiarity adjustment (country-level, tiny but “real”)
+    // Personalization adjustment
+    // Keep this meaningful but bounded so personalization influences ranking
+    // without overpowering the base destination fundamentals.
+    const cityId = city.id;
     const country = (city.country ?? "").trim();
-    const visited = country ? !!opts.visitedByCountry?.[country] : false;
-    const trips = country ? nOr(opts.tripsByCountry?.[country], 0) : 0;
+
+    const visitedByCity = cityId ? !!opts.visitedByCity?.[cityId] : false;
+    const visitedByCountry = country ? !!opts.visitedByCountry?.[country] : false;
+    const visited = visitedByCity || visitedByCountry;
+
+    const tripsByCity = cityId ? nOr(opts.tripsByCity?.[cityId], 0) : 0;
+    const tripsByCountry = country ? nOr(opts.tripsByCountry?.[country], 0) : 0;
+    const trips = clamp(Math.max(tripsByCity, tripsByCountry), 0, 99);
+
+    const feedback = cityId ? opts.feedbackByCity?.[cityId] : undefined;
 
     let familiarityAdj = 0;
-    if (country) {
-      if (visited) familiarityAdj = clamp(trips / 5, 0, 1) * 1.5; // up to +1.5
-      else familiarityAdj = 0.75; // small novelty preference
-    }
+    if (trips >= 4) familiarityAdj = 3;
+    else if (trips >= 2) familiarityAdj = 2;
+    else if (trips >= 1) familiarityAdj = 1;
+    else if (visited) familiarityAdj = 0.5;
 
-    const totalScore = clamp0to100(totalScoreBase - confidencePenalty + familiarityAdj);
+    let feedbackAdj = 0;
+    if (feedback === "love") feedbackAdj = 6;
+    else if (feedback === "maybe") feedbackAdj = 2;
+    else if (feedback === "pass") feedbackAdj = -10;
+
+    const personalizationAdj = clamp(familiarityAdj + feedbackAdj, -12, 8);
+
+    const totalScore = clamp0to100(totalScoreBase - confidencePenalty + personalizationAdj);
 
     // Top drivers: points = score × normalized weight
     const topDrivers: TopDriver[] = DRIVER_KEYS.map((k) => {
@@ -557,7 +585,14 @@ export function scoreCities(cities: City[], profile: Profile, options?: ScoreOpt
       components,
       topDrivers,
       highlights,
-      explain: { coverage, confidence, penalties, familiarityAdj },
+      explain: {
+        coverage,
+        confidence,
+        penalties,
+        familiarityAdj,
+        feedbackAdj,
+        personalizationAdj,
+      },
       estimatedTripCostUsd,
       costBreakdownUsd: breakdown,
       budgetUsd,

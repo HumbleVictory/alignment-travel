@@ -1,7 +1,7 @@
 ﻿// components/TierBoard.tsx
 "use client";
 
-import type { ScoredCity } from "@/lib/scoring";
+import type { ScoredCity, TopDriver } from "@/lib/scoring";
 
 const TIER_ORDER: Array<ScoredCity["tier"]> = ["S", "A", "B", "C", "D"];
 
@@ -74,7 +74,7 @@ function BudgetBadge({
   const isOver = status === "over";
   const isWithin = status === "within";
 
-  const label = isWithin ? "Within budget" : isOver ? "Over budget" : "Under budget";
+  const label = isWithin ? "Within budget" : isOver ? "Overbudget" : "Underbudget";
 
   const num =
     typeof deltaUsd === "number" && Number.isFinite(deltaUsd)
@@ -97,6 +97,31 @@ function BudgetBadge({
       {sub ? <span className="ml-1 opacity-70">{sub}</span> : null}
     </span>
   );
+}
+
+function pickStrongest(drivers: TopDriver[] | undefined, n = 2) {
+  const list = Array.isArray(drivers) ? drivers.slice() : [];
+  return list.sort((a, b) => (b.points ?? 0) - (a.points ?? 0)).slice(0, n);
+}
+
+function pickConstraint(drivers: TopDriver[] | undefined) {
+  const list = Array.isArray(drivers) ? drivers.slice() : [];
+  // High raw weight + low score = constraint signal
+  const ranked = list
+    .map((d) => {
+      const w = typeof d.weightRaw === "number" ? d.weightRaw : 0;
+      const s = typeof d.score === "number" ? d.score : 0;
+      return { d, v: w * (100 - s) };
+    })
+    .sort((a, b) => b.v - a.v);
+
+  const best = ranked[0]?.d ?? null;
+  if (!best) return null;
+
+  const w = best.weightRaw ?? 0;
+  const s = best.score ?? 0;
+
+  return w >= 45 && s <= 55 ? best : null;
 }
 
 export function TierBoard({
@@ -122,7 +147,6 @@ export function TierBoard({
 
         return (
           <section key={tier} className="panel p-5">
-            {/* Tier header (matches v1 panel language) */}
             <div className="flex items-center gap-3">
               <div className={cx("h-9 w-1.5 rounded-full", meta.accentBar)} />
 
@@ -139,17 +163,22 @@ export function TierBoard({
                 <span className="truncate text-sm text-white/70">{meta.subtitle}</span>
               </div>
 
-              <div className="ml-auto text-xs font-semibold text-white/45">
-                {list.length}
-              </div>
+              <div className="ml-auto text-xs font-semibold text-white/45">{list.length}</div>
             </div>
 
-            {/* Cards grid */}
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               {list.map((sc) => {
                 const city = sc.city;
                 const isPinned = pinnedIds.includes(city.id);
                 const isSelected = selectedId === city.id;
+
+                const strongest = pickStrongest(sc.topDrivers, 2);
+                const constraint = pickConstraint(sc.topDrivers);
+
+                const primary = strongest[0]?.label ?? null;
+                const secondary = strongest[1]?.label ?? null;
+
+                const score = Math.round(sc.totalScore);
 
                 return (
                   <div
@@ -164,7 +193,6 @@ export function TierBoard({
                       }
                     }}
                     className={cx(
-                      // v1-style card language
                       "rounded-3xl border border-white/10 bg-white/[0.04] backdrop-blur p-4 text-left",
                       "shadow-[0_18px_60px_rgba(0,0,0,0.28)]",
                       "transition hover:-translate-y-[1px] hover:border-white/15 hover:bg-white/[0.06]",
@@ -175,12 +203,8 @@ export function TierBoard({
                     {/* top row */}
                     <div className="flex items-start gap-3">
                       <div className="min-w-0">
-                        <div className="truncate text-base font-semibold text-white/90">
-                          {city.name}
-                        </div>
-                        <div className="truncate text-sm text-white/65">
-                          {city.country}
-                        </div>
+                        <div className="truncate text-base font-semibold text-white/90">{city.name}</div>
+                        <div className="truncate text-sm text-white/65">{city.country}</div>
                       </div>
 
                       <div className="ml-auto flex shrink-0 items-center gap-2">
@@ -195,9 +219,7 @@ export function TierBoard({
                             }}
                             className={cx(
                               "ui-btn rounded-full px-2.5 py-1 text-xs font-semibold",
-                              isPinned
-                                ? "bg-white text-black"
-                                : "bg-white/10 text-white hover:bg-white/15"
+                              isPinned ? "bg-white text-black" : "bg-white/10 text-white hover:bg-white/15"
                             )}
                             title={isPinned ? "Unpin" : "Pin to compare"}
                           >
@@ -207,38 +229,75 @@ export function TierBoard({
                       </div>
                     </div>
 
-                    {/* score + rail */}
-                    <div className="mt-3 flex items-center justify-between">
-                      <div className="text-sm text-white/70">
-                        Score{" "}
-                        <span className="font-semibold text-white">
-                          {Math.round(sc.totalScore)}
-                        </span>
+                    {/* score emphasis */}
+                    <div className="mt-4 flex items-end justify-between gap-3">
+                      <div>
+                        <div className="text-[11px] font-semibold tracking-wide text-white/45">ALIGNMENT</div>
+                        <div className="mt-1 text-3xl font-semibold text-white">{score}</div>
                       </div>
 
-                      <div className={cx("h-1.5 w-28 rounded-full", meta.railTint)}>
+                      <div className="shrink-0 text-right">
+                        <div className="text-[11px] font-semibold text-white/45">TIER</div>
+                        <div
+                          className={cx(
+                            "mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
+                            meta.tierPillBg,
+                            meta.tierPillText
+                          )}
+                        >
+                          {tier}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* rail */}
+                    <div className="mt-3">
+                      <div className={cx("h-1.5 w-full rounded-full", meta.railTint)}>
                         <div
                           className={cx("h-1.5 rounded-full", meta.accentBar)}
-                          style={{
-                            width: `${Math.max(2, Math.min(100, sc.totalScore))}%`,
-                          }}
+                          style={{ width: `${Math.max(2, Math.min(100, sc.totalScore))}%` }}
                         />
                       </div>
                     </div>
 
-                    {/* highlights */}
-                    {sc.highlights?.length ? (
-                      <div className="mt-3 flex flex-wrap gap-1.5">
-                        {sc.highlights.slice(0, 3).map((h) => (
-                          <span
-                            key={h}
-                            className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-xs text-white/75"
-                          >
-                            {h}
-                          </span>
-                        ))}
+                    {/* contributors + causality */}
+                    <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-3">
+                      <div className="text-[11px] font-semibold tracking-wide text-white/45">STRONGEST CONTRIBUTORS</div>
+                      <div className="mt-1 text-sm text-white/80">
+                        {primary ? (
+                          <>
+                            {primary}
+                            {secondary ? <span className="text-white/45"> · </span> : null}
+                            {secondary ? secondary : null}
+                          </>
+                        ) : (
+                          <span className="text-white/55">—</span>
+                        )}
                       </div>
-                    ) : null}
+
+                      <div className="mt-2 text-[11px] leading-snug text-white/55">
+                        {primary ? (
+                          <>
+                            Driven by <span className="font-semibold text-white/70">{primary}</span>
+                            {secondary ? (
+                              <>
+                                {" "}
+                                and <span className="font-semibold text-white/70">{secondary}</span>
+                              </>
+                            ) : null}
+                            {constraint ? (
+                              <>
+                                {" "}
+                                · Constraint: <span className="font-semibold text-white/70">{constraint.label}</span>
+                              </>
+                            ) : null}
+                            .
+                          </>
+                        ) : (
+                          <>Weighted evaluation produced this outcome.</>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 );
               })}

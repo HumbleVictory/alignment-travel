@@ -2,200 +2,112 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import type { ScoredCity } from "@/lib/scoring";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/cn";
-import { overlayVariants, drawerRightVariants, drawerBottomVariants } from "@/lib/motion";
 
-type DriverKey =
-  | "flight"
-  | "hotel"
-  | "diningValue"
-  | "culinaryDensity"
-  | "shopping"
-  | "safetyTransit"
-  | "weather"
-  | "crowds";
+function useMounted() {
+  const [mounted, setMounted] = React.useState(false);
 
-const DRIVER_ORDER: DriverKey[] = [
-  "flight",
-  "hotel",
-  "diningValue",
-  "culinaryDensity",
-  "shopping",
-  "safetyTransit",
-  "weather",
-  "crowds",
-];
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
-const DRIVER_LABEL: Record<DriverKey, string> = {
-  flight: "Flights",
-  hotel: "Hotels",
-  diningValue: "Dining value",
-  culinaryDensity: "Culinary density",
-  shopping: "Shopping",
-  safetyTransit: "Safety & transit",
-  weather: "Weather fit",
-  crowds: "Low crowds",
-};
-
-type RawWeights = Record<DriverKey, number>;
-
-function clamp(n: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, n));
+  return mounted;
 }
-function nOr(n: unknown, fallback = 0) {
-  return typeof n === "number" && Number.isFinite(n) ? n : fallback;
+
+function useIsDesktop(breakpoint = 1180) {
+  const [isDesktop, setIsDesktop] = React.useState(false);
+
+  React.useEffect(() => {
+    const mq = window.matchMedia(`(min-width: ${breakpoint}px)`);
+
+    const update = () => setIsDesktop(mq.matches);
+    update();
+
+    mq.addEventListener?.("change", update);
+    return () => mq.removeEventListener?.("change", update);
+  }, [breakpoint]);
+
+  return isDesktop;
 }
-function normalizeWeightsPct(raw: RawWeights): RawWeights {
-  const safe: RawWeights = {
-    flight: Math.max(0, nOr(raw.flight, 0)),
-    hotel: Math.max(0, nOr(raw.hotel, 0)),
-    diningValue: Math.max(0, nOr(raw.diningValue, 0)),
-    culinaryDensity: Math.max(0, nOr(raw.culinaryDensity, 0)),
-    shopping: Math.max(0, nOr(raw.shopping, 0)),
-    safetyTransit: Math.max(0, nOr(raw.safetyTransit, 0)),
-    weather: Math.max(0, nOr(raw.weather, 0)),
-    crowds: Math.max(0, nOr(raw.crowds, 0)),
-  };
 
-  const sum =
-    safe.flight +
-    safe.hotel +
-    safe.diningValue +
-    safe.culinaryDensity +
-    safe.shopping +
-    safe.safetyTransit +
-    safe.weather +
-    safe.crowds;
+function nOr(v: unknown, fallback = 0) {
+  return typeof v === "number" && Number.isFinite(v) ? v : fallback;
+}
 
-  if (sum <= 0) {
-    const eq = 100 / DRIVER_ORDER.length;
+function scoreOf(c: ScoredCity) {
+  return Math.round(nOr((c as any)?.totalScore, nOr((c as any)?.score, 0)));
+}
+
+function tierOf(c: ScoredCity) {
+  const tier = (c as any)?.tier;
+  return typeof tier === "string" && tier.length ? tier : "C";
+}
+
+function cityName(c: ScoredCity) {
+  const name = (c as any)?.city?.name;
+  return typeof name === "string" && name.length ? name : "City";
+}
+
+function countryName(c: ScoredCity) {
+  const country = (c as any)?.city?.country;
+  return typeof country === "string" ? country : "";
+}
+
+function cityId(c: ScoredCity) {
+  const id = (c as any)?.city?.id;
+  return typeof id === "string" && id.length ? id : cityName(c);
+}
+
+function fmtUsd(n: unknown) {
+  if (typeof n !== "number" || !Number.isFinite(n)) return "";
+  const abs = Math.round(Math.abs(n)).toLocaleString();
+  return `${n < 0 ? "-" : "+"}$${abs}`;
+}
+
+function budgetBadge(c: ScoredCity) {
+  const status = String((c as any)?.budgetStatus ?? "unknown");
+  const delta = (c as any)?.budgetDeltaUsd;
+
+  if (status === "under") {
     return {
-      flight: eq,
-      hotel: eq,
-      diningValue: eq,
-      culinaryDensity: eq,
-      shopping: eq,
-      safetyTransit: eq,
-      weather: eq,
-      crowds: eq,
+      label: "Under",
+      value: fmtUsd(delta),
+      tone: "green" as const,
+    };
+  }
+
+  if (status === "over") {
+    return {
+      label: "Over",
+      value: fmtUsd(delta),
+      tone: "red" as const,
+    };
+  }
+
+  if (status === "within") {
+    return {
+      label: "Within",
+      value: "",
+      tone: "neutral" as const,
     };
   }
 
   return {
-    flight: (safe.flight / sum) * 100,
-    hotel: (safe.hotel / sum) * 100,
-    diningValue: (safe.diningValue / sum) * 100,
-    culinaryDensity: (safe.culinaryDensity / sum) * 100,
-    shopping: (safe.shopping / sum) * 100,
-    safetyTransit: (safe.safetyTransit / sum) * 100,
-    weather: (safe.weather / sum) * 100,
-    crowds: (safe.crowds / sum) * 100,
+    label: "Budget",
+    value: "",
+    tone: "neutral" as const,
   };
 }
-function contributionPoints(weightPct: number, score: number) {
-  return (weightPct / 100) * score;
-}
-function fmt1(n: number) {
-  return (Math.round(n * 10) / 10).toFixed(1);
-}
-function getId(it: any): string {
-  return (it?.city?.id ?? it?.id ?? "") as string;
-}
-function getName(it: any): string {
-  return (it?.city?.name ?? it?.name ?? "") as string;
-}
-function getComponents(it: any): Record<DriverKey, number> {
-  const c = (it?.components ?? {}) as Partial<Record<DriverKey, number>>;
-  return {
-    flight: clamp(nOr(c.flight, 0), 0, 100),
-    hotel: clamp(nOr(c.hotel, 0), 0, 100),
-    diningValue: clamp(nOr(c.diningValue, 0), 0, 100),
-    culinaryDensity: clamp(nOr(c.culinaryDensity, 0), 0, 100),
-    shopping: clamp(nOr(c.shopping, 0), 0, 100),
-    safetyTransit: clamp(nOr(c.safetyTransit, 0), 0, 100),
-    weather: clamp(nOr(c.weather, 0), 0, 100),
-    crowds: clamp(nOr(c.crowds, 0), 0, 100),
-  };
-}
-function getWeightsPct(it: any): RawWeights {
-  const w = (it?.weightsPct ?? {}) as Partial<Record<DriverKey, number>>;
-  const base: RawWeights = {
-    flight: clamp(nOr(w.flight, 0), 0, 100),
-    hotel: clamp(nOr(w.hotel, 0), 0, 100),
-    diningValue: clamp(nOr(w.diningValue, 0), 0, 100),
-    culinaryDensity: clamp(nOr(w.culinaryDensity, 0), 0, 100),
-    shopping: clamp(nOr(w.shopping, 0), 0, 100),
-    safetyTransit: clamp(nOr(w.safetyTransit, 0), 0, 100),
-    weather: clamp(nOr(w.weather, 0), 0, 100),
-    crowds: clamp(nOr(w.crowds, 0), 0, 100),
-  };
-  return normalizeWeightsPct(base);
-}
-
-function useIsMobile() {
-  const [isMobile, setIsMobile] = React.useState(false);
-  React.useEffect(() => {
-    const mq = window.matchMedia("(max-width: 768px)");
-    const onChange = () => setIsMobile(mq.matches);
-    onChange();
-    mq.addEventListener?.("change", onChange);
-    return () => mq.removeEventListener?.("change", onChange);
-  }, []);
-  return isMobile;
-}
-
-function usd(n: unknown) {
-  return typeof n === "number" && Number.isFinite(n) ? `$${Math.round(n)}` : "—";
-}
-function pct(n: unknown) {
-  return typeof n === "number" && Number.isFinite(n) ? `${Math.round(n)}%` : "—";
-}
-function int(n: unknown) {
-  return typeof n === "number" && Number.isFinite(n) ? `${Math.round(n)}` : "—";
-}
-
-function driverBasisLine(it: any, k: DriverKey): string {
-  const c = it?.city ?? {};
-  switch (k) {
-    case "flight": {
-      const nyc = c?.flightFrom?.nyc;
-      const phl = c?.flightFrom?.phl;
-      const parts: string[] = [];
-      if (Number.isFinite(nyc)) parts.push(`NYC ${usd(nyc)}`);
-      if (Number.isFinite(phl)) parts.push(`PHL ${usd(phl)}`);
-      return parts.length
-        ? `Based on: roundtrip flight estimate · ${parts.join(" · ")}`
-        : "Based on: roundtrip flight estimate";
-    }
-    case "hotel":
-      return `Based on: avg nightly price · 4★ ${usd(c?.avg4StarPriceUsd)} · 5★ ${usd(c?.avg5StarPriceUsd)}`;
-    case "diningValue":
-      return `Based on: meal prices · casual ${usd(c?.casualMealUsd)} · mid ${usd(c?.midDinnerUsd)} · fine ${usd(c?.fineDinnerUsd)}`;
-    case "culinaryDensity":
-      return `Based on: Michelin ${int(c?.michelinStars)} · Bib ${int(c?.bibGourmand)} · café ${int(c?.cafeCultureIndex)}/100`;
-    case "shopping":
-      return `Based on: luxury ${int(c?.luxuryIndexVsUS)}/100 · VAT ${pct(c?.vatRefundPct)}`;
-    case "safetyTransit":
-      return `Based on: safety ${int(c?.safetyIndex)}/100 · transit ${int(c?.transitIndex)}/100`;
-    case "weather":
-      return `Based on: weather index ${int(c?.weatherIndex)}/100 (prototype signal)`;
-    case "crowds":
-      return `Based on: crowds index ${int(c?.crowdsIndex)}/100 (lower crowds score higher)`;
-    default:
-      return "Based on: dataset signals";
-  }
-}
-
-type TabKey = "contrib" | "whatif";
 
 export function CompareDrawer({
   pinned,
   isOpen,
   onClose,
   onClear,
-  onSwap,
+  onSwap: _onSwap,
   onSelect,
 }: {
   pinned: ScoredCity[];
@@ -204,291 +116,429 @@ export function CompareDrawer({
   onClear: () => void;
   onSwap: () => void;
   onSelect: (c: ScoredCity) => void;
+  variant?: "center" | "right";
 }) {
-  const isMobile = useIsMobile();
+  const mounted = useMounted();
+  const isDesktop = useIsDesktop(1180);
   const reducedMotion = useReducedMotion();
 
-  const [localWeights, setLocalWeights] = React.useState<Record<string, RawWeights>>({});
-  const [tabsById, setTabsById] = React.useState<Record<string, TabKey>>({});
+  const [dismissed, setDismissed] = React.useState(true);
+
+  const count = Array.isArray(pinned) ? pinned.length : 0;
+  const first = pinned[0] ?? null;
+  const second = pinned[1] ?? null;
+
+  const pinnedKey = React.useMemo(() => {
+    return pinned.map((c) => cityId(c)).join("|");
+  }, [pinned]);
+
+  /**
+   * Important:
+   * This makes the panel open automatically when the second city is pinned,
+   * even if the parent page does not correctly flip isOpen to true.
+   */
+  React.useEffect(() => {
+    if (count >= 2) {
+      setDismissed(false);
+    }
+
+    if (count === 0) {
+      setDismissed(true);
+    }
+  }, [count, pinnedKey]);
+
+  const visible = count > 0 && (isOpen || !dismissed);
+
+  const diff = first && second ? scoreOf(first) - scoreOf(second) : 0;
+
+  const leaderText =
+    first && second
+      ? diff === 0
+        ? "Even match"
+        : diff > 0
+        ? `${cityName(first)} leads`
+        : `${cityName(second)} leads`
+      : first
+      ? `${cityName(first)} locked`
+      : "No cities pinned";
+
+  const handleClose = React.useCallback(() => {
+    setDismissed(true);
+    onClose();
+  }, [onClose]);
+
+  const handleClear = React.useCallback(() => {
+    setDismissed(true);
+    onClear();
+    onClose();
+  }, [onClear, onClose]);
 
   React.useEffect(() => {
-    if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
+    if (!visible) return;
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") handleClose();
+    }
+
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [isOpen, onClose]);
+  }, [visible, handleClose]);
 
-  React.useEffect(() => {
-    if (!isOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [isOpen]);
+  if (!mounted || typeof document === "undefined") return null;
 
-  const count = pinned.length;
-  const panelVariants = isMobile ? drawerBottomVariants : drawerRightVariants;
-
-  return (
+  return createPortal(
     <AnimatePresence>
-      {isOpen ? (
-        <>
-          <motion.div
-            className="fixed inset-0 z-[80] bg-black/65 backdrop-blur-[2px]"
-            aria-hidden="true"
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            variants={overlayVariants}
-            onClick={onClose}
+      {visible ? (
+        isDesktop ? (
+          <DesktopComparePanel
+            count={count}
+            first={first}
+            second={second}
+            leaderText={leaderText}
+            diff={diff}
+            reducedMotion={reducedMotion}
+            onClose={handleClose}
+            onClear={handleClear}
+            onSelect={onSelect}
           />
-
-          <motion.aside
-            role="dialog"
-            aria-modal="true"
-            aria-label="Compare drawer"
-            className={cn(
-              "fixed z-[90] flex flex-col will-change-transform",
-              "border border-white/10 bg-white/[0.04] backdrop-blur shadow-[0_30px_90px_rgba(0,0,0,0.55)]",
-              isMobile ? "left-0 right-0 bottom-0 rounded-t-3xl" : "top-0 right-0 h-dvh w-[min(980px,92vw)] rounded-l-3xl"
-            )}
-            initial={reducedMotion ? false : "initial"}
-            animate={reducedMotion ? undefined : "animate"}
-            exit={reducedMotion ? undefined : "exit"}
-            variants={panelVariants}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="border-b border-white/10 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-base font-semibold tracking-tight text-white/90">Compare</h2>
-                    <span className="ui-chip text-[11px] font-semibold text-white/70">{count}/2 pinned</span>
-                  </div>
-                  <p className="mt-1 text-xs text-white/60">
-                    “What-if” changes priority weights locally (ranking stays unchanged).
-                  </p>
-                  <LinkInline href="/methodology" label="View methodology" />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  {count > 0 && (
-                    <button type="button" onClick={onClear} className="ui-btn rounded-xl px-2.5 py-1.5 text-xs font-semibold text-white/85">
-                      Clear
-                    </button>
-                  )}
-                  {count === 2 && (
-                    <button
-                      type="button"
-                      onClick={onSwap}
-                      className="ui-btn rounded-xl px-2.5 py-1.5 text-xs font-semibold text-white/85"
-                      title="Swap left/right"
-                    >
-                      Swap
-                    </button>
-                  )}
-                  <button type="button" onClick={onClose} className="ui-btn rounded-xl px-2.5 py-1.5 text-xs font-semibold text-white/85">
-                    Close
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4">
-              {count === 0 ? (
-                <div className="rounded-3xl border border-white/10 bg-black/20 p-4 text-sm text-white/70">
-                  Pin up to <span className="font-semibold text-white/85">2</span> cities to compare drivers and do local what-ifs.
-                </div>
-              ) : (
-                <div className={count === 2 && !isMobile ? "grid gap-4 md:grid-cols-2" : "space-y-4"}>
-                  {pinned.map((it) => {
-                    const id = getId(it);
-                    const name = getName(it);
-                    const components = getComponents(it);
-
-                    const baseWeights = getWeightsPct(it);
-                    const local = localWeights[id];
-                    const activeWeights = normalizeWeightsPct(local ?? baseWeights);
-
-                    const totalContrib = DRIVER_ORDER.reduce(
-                      (acc, k) => acc + contributionPoints(activeWeights[k], components[k]),
-                      0
-                    );
-
-                    const modelTotal = nOr((it as any).totalScore, nOr((it as any).score, 0));
-                    const tab: TabKey = tabsById[id] ?? "contrib";
-
-                    const status = (it as any).budgetStatus ?? "unknown";
-                    const est = (it as any).estimatedTripCostUsd ?? null;
-                    const budget = (it as any).budgetUsd ?? null;
-
-                    return (
-                      <div key={id} className="rounded-3xl border border-white/10 bg-white/[0.04] backdrop-blur p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <div className="text-sm font-semibold tracking-tight text-white/90">{name}</div>
-
-                              {status !== "unknown" && budget != null && est != null && (
-                                <span
-                                  className={cn(
-                                    "ui-chip text-[11px] font-semibold",
-                                    status === "over" ? "text-rose-200" : status === "within" ? "text-white/70" : "text-emerald-200"
-                                  )}
-                                  title="Informational only (does not affect ranking)."
-                                >
-                                  {status === "over" ? "Overbudget" : status === "within" ? "Within budget" : "Underbudget"}
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="mt-1 text-xs text-white/60">
-                              Model total: <span className="font-semibold text-white/85">{fmt1(modelTotal)}</span>
-                              <span className="text-white/25"> · </span>
-                              Σ contributions: <span className="font-semibold text-white/85">{fmt1(totalContrib)}</span>
-                            </div>
-                          </div>
-
-                          <button type="button" onClick={() => onSelect(it)} className="ui-btn rounded-xl px-2.5 py-1 text-xs font-semibold text-white/85">
-                            Open
-                          </button>
-                        </div>
-
-                        <div className="mt-4 flex items-center justify-between gap-2">
-                          <div className="flex gap-2">
-                            <TabButton active={tab === "contrib"} onClick={() => setTabsById((p) => ({ ...p, [id]: "contrib" }))}>
-                              Contributions
-                            </TabButton>
-                            <TabButton active={tab === "whatif"} onClick={() => setTabsById((p) => ({ ...p, [id]: "whatif" }))}>
-                              What-if
-                            </TabButton>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setLocalWeights((prev) => {
-                                const next = { ...prev };
-                                delete next[id];
-                                return next;
-                              })
-                            }
-                            className="text-[11px] font-semibold text-white/55 hover:text-white/85"
-                            title="Reset local what-if sliders"
-                          >
-                            Reset
-                          </button>
-                        </div>
-
-                        {tab === "contrib" ? (
-                          <div className="mt-3">
-                            <div className="flex items-center justify-between">
-                              <div className="text-xs font-semibold text-white/85">Contribution breakdown</div>
-                              <div className="text-[11px] text-white/45">(weight% × score → points)</div>
-                            </div>
-
-                            <div className="mt-2 space-y-2">
-                              {DRIVER_ORDER.map((k) => {
-                                const w = activeWeights[k];
-                                const s = components[k];
-                                const pts = contributionPoints(w, s);
-
-                                return (
-                                  <div key={k} className="rounded-2xl border border-white/10 bg-black/20 p-2.5">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className="text-xs font-medium text-white/85">{DRIVER_LABEL[k]}</div>
-                                      <div className="text-xs text-white/60">
-                                        <span className="font-semibold text-white/85">{Math.round(w)}%</span> × {Math.round(s)} →{" "}
-                                        <span className="font-semibold text-emerald-200">{fmt1(pts)}</span>
-                                      </div>
-                                    </div>
-
-                                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                                      <div className="h-1.5 bg-white/40" style={{ width: `${clamp(s, 0, 100)}%` }} />
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="mt-3">
-                            <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                              <div className="text-[11px] text-white/60">Adjust local weights (0–100). We normalize internally.</div>
-                            </div>
-
-                            <div className="mt-3 space-y-3">
-                              {DRIVER_ORDER.map((k) => {
-                                const raw = local?.[k] ?? baseWeights[k];
-                                const v = clamp(Math.round(raw), 0, 100);
-
-                                return (
-                                  <div key={k} className="rounded-2xl border border-white/10 bg-black/20 p-3">
-                                    <div className="flex items-center justify-between text-xs text-white/70">
-                                      <span className="font-medium">{DRIVER_LABEL[k]}</span>
-                                      <span className="font-semibold text-white/85">{v}</span>
-                                    </div>
-
-                                    <input
-                                      type="range"
-                                      min={0}
-                                      max={100}
-                                      value={v}
-                                      onChange={(e) => {
-                                        const next = clamp(parseInt(e.target.value, 10), 0, 100);
-                                        setLocalWeights((prev) => ({
-                                          ...prev,
-                                          [id]: {
-                                            ...(prev[id] ?? baseWeights),
-                                            [k]: next,
-                                          },
-                                        }));
-                                      }}
-                                      className="mt-2 w-full accent-emerald-400"
-                                    />
-
-                                    <div className="mt-2 text-[11px] leading-snug text-white/60">
-                                      <div>
-                                        Priority: <span className="font-semibold text-white/80">0–100</span> (higher = matters more)
-                                      </div>
-                                      <div className="mt-0.5">{driverBasisLine(it, k)}</div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="border-t border-white/10 p-4">
-              <div className="text-[11px] text-white/40">This is an “instrument panel”: same math, more clarity.</div>
-            </div>
-          </motion.aside>
-        </>
+        ) : (
+          <MobileComparePanel
+            count={count}
+            first={first}
+            second={second}
+            leaderText={leaderText}
+            reducedMotion={reducedMotion}
+            onClose={handleClose}
+            onClear={handleClear}
+            onSelect={onSelect}
+          />
+        )
       ) : null}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
 
-function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function DesktopComparePanel({
+  count,
+  first,
+  second,
+  leaderText,
+  diff,
+  reducedMotion,
+  onClose,
+  onClear,
+  onSelect,
+}: {
+  count: number;
+  first: ScoredCity | null;
+  second: ScoredCity | null;
+  leaderText: string;
+  diff: number;
+  reducedMotion: boolean | null;
+  onClose: () => void;
+  onClear: () => void;
+  onSelect: (c: ScoredCity) => void;
+}) {
+  return (
+    <motion.aside
+      role="complementary"
+      aria-label="Pinned city comparison"
+      className={cn(
+        "pointer-events-auto fixed top-[96px] bottom-6 w-[356px] overflow-hidden rounded-[28px]",
+        "border border-white/10 bg-[#06080c]",
+        "shadow-[0_30px_90px_rgba(0,0,0,0.84)]",
+        "ring-1 ring-white/[0.06]"
+      )}
+      style={{
+        zIndex: 2147483000,
+        right: "max(24px, calc((100vw - 1152px) / 2 + 24px))",
+      }}
+      initial={reducedMotion ? false : { x: 32, opacity: 0 }}
+      animate={reducedMotion ? undefined : { x: 0, opacity: 1 }}
+      exit={reducedMotion ? undefined : { x: 32, opacity: 0 }}
+      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="h-px bg-[linear-gradient(to_right,transparent,rgba(255,255,255,0.2),rgba(200,170,110,0.5),transparent)]" />
+
+      <div className="flex h-full flex-col">
+        <header className="border-b border-white/[0.08] bg-[#070a0f] px-5 py-5">
+          <div className="flex items-center gap-2">
+            <span className="h-1.5 w-1.5 rounded-full bg-[#c8aa6e] shadow-[0_0_14px_rgba(200,170,110,0.5)]" />
+            <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/42">
+              Compare
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-end justify-between gap-4">
+            <div>
+              <div className="text-[32px] font-semibold leading-none tracking-[-0.06em] text-white">
+                {count}/2
+              </div>
+              <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/34">
+                pinned
+              </div>
+            </div>
+
+            <div className="max-w-[170px] rounded-full border border-white/10 bg-[#10151c] px-3 py-1.5 text-right text-[11px] font-semibold text-white/62">
+              {leaderText}
+            </div>
+          </div>
+
+          {first && second ? (
+            <div className="mt-4 rounded-2xl border border-white/[0.08] bg-[#0b1017] px-3 py-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/32">
+                Spread
+              </div>
+              <div className="mt-1 text-sm font-semibold text-white/76">
+                {Math.abs(diff)} alignment points
+              </div>
+            </div>
+          ) : null}
+        </header>
+
+        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5">
+          {first ? (
+            <PinnedSlot city={first} slot={1} onOpen={() => onSelect(first)} />
+          ) : (
+            <EmptySlot slot={1} />
+          )}
+
+          {second ? (
+            <PinnedSlot city={second} slot={2} onOpen={() => onSelect(second)} />
+          ) : (
+            <EmptySlot slot={2} />
+          )}
+        </div>
+
+        <footer className="border-t border-white/[0.08] bg-[#05070a] px-5 py-4">
+          <div className="grid grid-cols-2 gap-3">
+            <PanelButton onClick={onClear} disabled={count === 0}>
+              Clear
+            </PanelButton>
+
+            <PanelButton onClick={onClose}>Close</PanelButton>
+          </div>
+        </footer>
+      </div>
+    </motion.aside>
+  );
+}
+
+function MobileComparePanel({
+  count,
+  first,
+  second,
+  leaderText,
+  reducedMotion,
+  onClose,
+  onClear,
+  onSelect,
+}: {
+  count: number;
+  first: ScoredCity | null;
+  second: ScoredCity | null;
+  leaderText: string;
+  reducedMotion: boolean | null;
+  onClose: () => void;
+  onClear: () => void;
+  onSelect: (c: ScoredCity) => void;
+}) {
+  return (
+    <motion.aside
+      role="complementary"
+      aria-label="Pinned city comparison"
+      className={cn(
+        "pointer-events-auto fixed inset-x-3 bottom-3 overflow-hidden rounded-[24px]",
+        "border border-white/10 bg-[#06080c]",
+        "shadow-[0_24px_70px_rgba(0,0,0,0.82)] ring-1 ring-white/[0.06]"
+      )}
+      style={{ zIndex: 2147483000 }}
+      initial={reducedMotion ? false : { y: 24, opacity: 0 }}
+      animate={reducedMotion ? undefined : { y: 0, opacity: 1 }}
+      exit={reducedMotion ? undefined : { y: 24, opacity: 0 }}
+      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="h-px bg-[linear-gradient(to_right,transparent,rgba(255,255,255,0.2),rgba(200,170,110,0.5),transparent)]" />
+
+      <header className="border-b border-white/[0.08] bg-[#070a0f] px-4 py-4">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/42">
+          Compare
+        </div>
+        <div className="mt-2 text-xl font-semibold tracking-[-0.05em] text-white">
+          {count}/2 pinned
+        </div>
+        <div className="mt-2 text-sm text-white/54">{leaderText}</div>
+      </header>
+
+      <div className="space-y-3 px-4 py-4">
+        {first ? (
+          <PinnedSlot city={first} slot={1} onOpen={() => onSelect(first)} compact />
+        ) : (
+          <EmptySlot slot={1} compact />
+        )}
+
+        {second ? (
+          <PinnedSlot city={second} slot={2} onOpen={() => onSelect(second)} compact />
+        ) : (
+          <EmptySlot slot={2} compact />
+        )}
+      </div>
+
+      <footer className="grid grid-cols-2 gap-3 border-t border-white/[0.08] bg-[#05070a] px-4 py-4">
+        <PanelButton onClick={onClear} disabled={count === 0}>
+          Clear
+        </PanelButton>
+        <PanelButton onClick={onClose}>Close</PanelButton>
+      </footer>
+    </motion.aside>
+  );
+}
+
+function PinnedSlot({
+  city,
+  slot,
+  onOpen,
+  compact = false,
+}: {
+  city: ScoredCity;
+  slot: 1 | 2;
+  onOpen: () => void;
+  compact?: boolean;
+}) {
+  const budget = budgetBadge(city);
+
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onOpen();
+      }}
       className={cn(
-        "rounded-full px-3 py-1 text-xs font-semibold border transition",
-        active
-          ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-100"
-          : "border-white/15 bg-white/[0.04] text-white/80 hover:border-white/25 hover:bg-white/[0.06]"
+        "group relative w-full overflow-hidden rounded-[22px] border text-left transition duration-150",
+        "border-white/10 bg-[#0d1219]",
+        "shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
+        "hover:border-white/18 hover:bg-[#111821]",
+        "active:scale-[0.995]",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
+        compact ? "p-4" : "p-5"
+      )}
+      title={`Open ${cityName(city)} details`}
+    >
+      <div
+        className={cn(
+          "absolute inset-y-4 left-0 w-[3px] rounded-r-full",
+          slot === 1 ? "bg-[#c8aa6e]" : "bg-[#8f9fb0]"
+        )}
+      />
+
+      <div className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(to_right,rgba(255,255,255,0.14),transparent)]" />
+
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/36">
+            Slot {slot}
+          </div>
+
+          <div className="mt-2 text-[24px] font-semibold leading-none tracking-[-0.06em] text-white">
+            {scoreOf(city)}
+          </div>
+
+          <div className="mt-4 truncate text-lg font-semibold tracking-[-0.02em] text-white">
+            {cityName(city)}
+          </div>
+
+          <div className="mt-1 truncate text-sm text-white/52">{countryName(city)}</div>
+        </div>
+
+        <div className="shrink-0 text-right">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/30">
+            Alignment
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Badge tone={budget.tone}>{budget.label}</Badge>
+        {budget.value ? <Badge tone={budget.tone}>{budget.value}</Badge> : null}
+        <Badge>Tier {tierOf(city)}</Badge>
+      </div>
+
+      <div className="mt-4 flex items-center justify-end">
+        <span className="text-xs font-semibold text-white/42 transition group-hover:text-white/85">
+          Open →
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function EmptySlot({
+  slot,
+  compact = false,
+}: {
+  slot: 1 | 2;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "relative w-full overflow-hidden rounded-[22px] border border-dashed border-white/10 bg-[#0a0e13] text-left",
+        compact ? "p-4" : "p-5"
+      )}
+    >
+      <div className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(to_right,rgba(255,255,255,0.08),transparent)]" />
+
+      <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/28">
+        Slot {slot}
+      </div>
+
+      <div className="mt-3 text-base font-semibold text-white/70">
+        {slot === 1 ? "Ready to pin" : "Awaiting second city"}
+      </div>
+
+      <div className="mt-2 text-sm leading-6 text-white/42">
+        {slot === 1
+          ? "Choose a city from the board."
+          : "Pin another city to complete the compare panel."}
+      </div>
+    </div>
+  );
+}
+
+function PanelButton({
+  children,
+  onClick,
+  disabled,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!disabled) {
+          onClick();
+        }
+      }}
+      className={cn(
+        "h-11 rounded-[16px] border text-sm font-semibold transition",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
+        disabled
+          ? "cursor-not-allowed border-white/[0.06] bg-[#0a0d11] text-white/22"
+          : "border-white/10 bg-[#11161d] text-white/78 hover:border-white/16 hover:bg-[#171e27] hover:text-white"
       )}
     >
       {children}
@@ -496,10 +546,25 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-function LinkInline({ href, label }: { href: string; label: string }) {
+function Badge({
+  children,
+  tone = "neutral",
+}: {
+  children: React.ReactNode;
+  tone?: "neutral" | "green" | "red";
+}) {
   return (
-    <a href={href} className="mt-2 inline-block text-xs font-semibold text-emerald-200/90 hover:text-emerald-200">
-      {label}
-    </a>
+    <span
+      className={cn(
+        "inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold leading-none",
+        tone === "green"
+          ? "border-emerald-400/18 bg-emerald-400/10 text-emerald-100"
+          : tone === "red"
+          ? "border-rose-400/18 bg-rose-400/10 text-rose-100"
+          : "border-white/10 bg-white/[0.04] text-white/62"
+      )}
+    >
+      {children}
+    </span>
   );
 }

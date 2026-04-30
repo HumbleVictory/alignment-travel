@@ -1,6 +1,7 @@
 ﻿// app/layout.tsx
 import "./globals.css";
 import { SiteHeader } from "@/components/SiteHeader";
+import { SmoothScroll } from "@/components/SmoothScroll";
 
 export const metadata = {
   title: "Alignment Travel",
@@ -11,8 +12,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="min-h-dvh bg-[#05070a] text-white antialiased">
-        <SiteHeader />
-        {children}
+        <SmoothScroll>
+          <SiteHeader />
+          {children}
+        </SmoothScroll>
       </body>
     </html>
   );

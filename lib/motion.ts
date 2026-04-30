@@ -2,9 +2,9 @@
 export const EASE_OUT = [0.16, 1, 0.3, 1] as const;
 
 export const DUR = {
-  fast: 0.12,
-  base: 0.18,
-  slow: 0.26,
+  fast: 0.14,
+  base: 0.22,
+  slow: 0.34,
 } as const;
 
 export const motionTokens = {
@@ -14,7 +14,7 @@ export const motionTokens = {
 
 // Page transitions
 export const pageVariants = {
-  initial: { opacity: 0, y: 10, filter: "blur(2px)" },
+  initial: { opacity: 0, y: 12, filter: "blur(3px)" },
   animate: {
     opacity: 1,
     y: 0,
@@ -23,8 +23,8 @@ export const pageVariants = {
   },
   exit: {
     opacity: 0,
-    y: 8,
-    filter: "blur(2px)",
+    y: 10,
+    filter: "blur(3px)",
     transition: { duration: DUR.base, ease: EASE_OUT },
   },
 };
@@ -38,7 +38,7 @@ export const overlayVariants = {
 
 // Modal panel
 export const modalPanelVariants = {
-  initial: { opacity: 0, y: 14, scale: 0.99 },
+  initial: { opacity: 0, y: 16, scale: 0.99 },
   animate: {
     opacity: 1,
     y: 0,
@@ -47,7 +47,7 @@ export const modalPanelVariants = {
   },
   exit: {
     opacity: 0,
-    y: 10,
+    y: 12,
     scale: 0.99,
     transition: { duration: DUR.fast, ease: EASE_OUT },
   },

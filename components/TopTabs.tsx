@@ -9,7 +9,7 @@ type Tab = { href: string; label: string };
 
 const TABS: Tab[] = [
   { href: "/", label: "Home" },
-  { href: "/setup", label: "Preferences" },
+  { href: "/configure/profile", label: "Configure" },
   { href: "/results", label: "Results" },
   { href: "/philosophy", label: "Philosophy" },
   { href: "/methodology", label: "Methodology" },
