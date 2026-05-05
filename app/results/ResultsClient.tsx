@@ -1,7 +1,8 @@
 // app/results/ResultsClient.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { CITIES } from "@/data/cities";
@@ -183,8 +184,8 @@ export default function ResultsClient() {
   const demo = params.get("demo") === "1";
 
   /**
-   * Lowered from 1320 so normal desktop/laptop widths still show
-   * the right-side comparison panel.
+   * Desktop/laptop keeps the right-side comparison panel.
+   * Mobile/tablet gets a full-screen comparison window.
    */
   const useSidePanel = useMediaQuery("(min-width: 1180px)");
 
@@ -255,16 +256,35 @@ export default function ResultsClient() {
     });
   }, [scored]);
 
-  // If all cities are unpinned, hide compare.
-  // If there are pinned cities, keep/open compare.
+  /**
+   * Desktop behavior:
+   * - 1 pinned city opens the right-side panel.
+   *
+   * Mobile behavior:
+   * - 1 pinned city does not auto-open the comparison.
+   * - User can still tap Compare (1/2) to open it.
+   * - 2 pinned cities auto-open the full-screen comparison window.
+   */
   useEffect(() => {
+    if (!hydrated) return;
+
     if (pinned.length === 0) {
       setCompareOpen(false);
       return;
     }
 
-    setCompareOpen(true);
-  }, [pinned.length]);
+    if (useSidePanel) {
+      setCompareOpen(true);
+      return;
+    }
+
+    if (pinned.length >= 2) {
+      setCompareOpen(true);
+      return;
+    }
+
+    setCompareOpen(false);
+  }, [hydrated, pinned.length, useSidePanel]);
 
   const budgetCounts = useMemo(() => {
     let within = 0;
@@ -322,13 +342,14 @@ export default function ResultsClient() {
     if (exists) {
       const next = pinned.filter((p) => p.city.id !== id);
       setPinned(next);
-      setCompareOpen(next.length > 0);
+      setCompareOpen(useSidePanel ? next.length > 0 : next.length >= 2);
       return;
     }
 
     if (pinned.length < 2) {
-      setPinned([...pinned, it]);
-      setCompareOpen(true);
+      const next = [...pinned, it];
+      setPinned(next);
+      setCompareOpen(useSidePanel ? next.length > 0 : next.length >= 2);
       return;
     }
 
@@ -347,9 +368,43 @@ export default function ResultsClient() {
     setSelected(city);
   }
 
-  const showSideCompare = hydrated && useSidePanel && compareVisible;
-  const showMobileCompare = hydrated && !useSidePanel && compareVisible;
+  /**
+   * Mobile modal reliability:
+   * showMobileCompare no longer depends on !useSidePanel.
+   * The mobile modal renders whenever comparison is open,
+   * then the portal condition keeps it mobile-only.
+   */
+  const showCompare = hydrated && compareVisible;
+  const showSideCompare = showCompare && useSidePanel;
+  const showMobileCompare = showCompare;
   const shiftLeftPx = showSideCompare ? 390 : 0;
+
+  // Mobile only: lock the page behind the comparison window.
+  useEffect(() => {
+    if (!showMobileCompare) return;
+    if (useSidePanel) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [showMobileCompare, useSidePanel]);
+
+  // Mobile only: Escape closes the comparison window.
+  useEffect(() => {
+    if (!showMobileCompare) return;
+    if (useSidePanel) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setCompareOpen(false);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showMobileCompare, useSidePanel]);
 
   if (!hydrated) return null;
 
@@ -566,8 +621,8 @@ export default function ResultsClient() {
           ) : null}
         </div>
 
-        {showSideCompare ? (
-          <aside className="sticky top-[88px] self-start">
+        {showCompare ? (
+          <aside className="hidden min-w-0 self-start min-[1180px]:sticky min-[1180px]:top-[88px] min-[1180px]:block">
             <PinnedComparePanel
               pinned={pinned}
               onClear={clearPinned}
@@ -578,17 +633,66 @@ export default function ResultsClient() {
         ) : null}
       </div>
 
-      {showMobileCompare ? (
-        <div className="fixed inset-x-4 bottom-4 z-[1200]">
-          <PinnedComparePanel
-            pinned={pinned}
-            onClear={clearPinned}
-            onClose={() => setCompareOpen(false)}
-            onSelect={handleCompareSelect}
-            compact
-          />
-        </div>
-      ) : null}
+      {showMobileCompare && !useSidePanel && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label="City comparison"
+              style={{
+                position: "fixed",
+                inset: 0,
+                zIndex: 2147483647,
+              }}
+            >
+              <button
+                type="button"
+                aria-label="Close comparison"
+                onClick={() => setCompareOpen(false)}
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  zIndex: 1,
+                  background: "rgba(0, 0, 0, 0.84)",
+                  border: 0,
+                  padding: 0,
+                  margin: 0,
+                  cursor: "default",
+                }}
+              />
+
+              <div
+                style={{
+                  position: "fixed",
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  zIndex: 2,
+                  maxHeight: "100svh",
+                  overflowY: "auto",
+                  padding: "12px",
+                }}
+              >
+                <div
+                  style={{
+                    width: "100%",
+                    maxWidth: 460,
+                    margin: "0 auto",
+                  }}
+                >
+                  <PinnedComparePanel
+                    pinned={pinned}
+                    onClear={clearPinned}
+                    onClose={() => setCompareOpen(false)}
+                    onSelect={handleCompareSelect}
+                    compact
+                  />
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
     </main>
   );
 }
@@ -625,15 +729,26 @@ function PinnedComparePanel({
   return (
     <div
       className={[
-        "relative z-[1200] overflow-hidden rounded-[30px] border border-white/10 bg-[#06080c]",
+        "relative w-full overflow-hidden rounded-[30px] border border-white/10 bg-[#06080c]",
         "shadow-[0_30px_90px_rgba(0,0,0,0.62)] ring-1 ring-white/[0.05]",
-        compact ? "max-h-[70vh] overflow-y-auto" : "max-h-[calc(100vh-112px)]",
+        compact ? "max-h-[calc(100svh-24px)] overflow-y-auto" : "max-h-[calc(100vh-112px)]",
       ].join(" ")}
     >
       <div className="h-px bg-[linear-gradient(to_right,transparent,rgba(255,255,255,0.2),rgba(200,170,110,0.55),transparent)]" />
 
-      <div className="border-b border-white/[0.08] bg-[#070a0f] p-5">
-        <div className="flex items-center gap-2">
+      <div className="relative border-b border-white/[0.08] bg-[#070a0f] p-5">
+        {compact ? (
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-lg leading-none text-white/70 transition hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+            aria-label="Close comparison"
+          >
+            ×
+          </button>
+        ) : null}
+
+        <div className="flex items-center gap-2 pr-12">
           <span className="h-1.5 w-1.5 rounded-full bg-[#c8aa6e] shadow-[0_0_14px_rgba(200,170,110,0.55)]" />
 
           <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/42">
@@ -775,7 +890,7 @@ function ComparePanelButton({
   children,
   onClick,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   onClick: () => void;
 }) {
   return (
@@ -793,7 +908,7 @@ function CompareBadge({
   children,
   tone = "neutral",
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   tone?: "neutral" | "green" | "red";
 }) {
   return (

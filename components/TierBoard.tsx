@@ -1,6 +1,7 @@
 ﻿// components/TierBoard.tsx
 "use client";
 
+import type { MouseEvent } from "react";
 import type { ScoredCity, TopDriver } from "@/lib/scoring";
 
 const TIER_ORDER: Array<ScoredCity["tier"]> = ["S", "A", "B", "C", "D"];
@@ -73,29 +74,61 @@ function BudgetBadge({
 
   const isOver = status === "over";
   const isWithin = status === "within";
-
   const label = isWithin ? "Within budget" : isOver ? "Overbudget" : "Underbudget";
-
   const num =
     typeof deltaUsd === "number" && Number.isFinite(deltaUsd)
       ? Math.round(Math.abs(deltaUsd))
       : null;
-
   const sub = num == null ? "" : isWithin ? `±$${num}` : `${isOver ? "+" : "-"}$${num}`;
 
   return (
     <span
       className={cx(
-        "ui-btn pointer-events-none rounded-full px-2.5 py-1 text-xs font-semibold",
-        isWithin && "bg-white/10 text-white",
-        isOver && "bg-rose-400/15 text-rose-100",
-        !isOver && !isWithin && "bg-emerald-400/15 text-emerald-100"
+        "pointer-events-none inline-flex max-w-full min-w-0 items-center rounded-full border px-2.5 py-1 text-[11px] font-semibold",
+        isWithin && "border-white/12 bg-white/[0.055] text-white/72",
+        isOver && "border-rose-300/20 bg-rose-400/[0.08] text-rose-100/90",
+        !isOver &&
+          !isWithin &&
+          "border-emerald-300/20 bg-emerald-400/[0.08] text-emerald-100/90"
       )}
       title={label}
     >
-      {label}
-      {sub ? <span className="ml-1 opacity-70">{sub}</span> : null}
+      <span className="truncate">{label}</span>
+      {sub ? <span className="ml-1 shrink-0 opacity-65">{sub}</span> : null}
     </span>
+  );
+}
+
+function PinButton({
+  isPinned,
+  onClick,
+}: {
+  isPinned: boolean;
+  onClick: (e: MouseEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cx(
+        "group/pin relative shrink-0 overflow-hidden rounded-full border px-3 py-1.5 text-xs font-semibold transition duration-150",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-white/25 active:scale-[0.98]",
+        isPinned
+          ? "border-amber-100/35 bg-white text-black shadow-[0_0_0_1px_rgba(255,255,255,0.12),0_10px_32px_rgba(251,191,36,0.15)]"
+          : "border-white/14 bg-black/35 text-white/78 hover:border-white/26 hover:bg-white/[0.07] hover:text-white"
+      )}
+      title={isPinned ? "Remove from compare" : "Pin to compare"}
+    >
+      <span className="relative z-10 inline-flex items-center gap-1.5 whitespace-nowrap">
+        <span
+          className={cx(
+            "h-1.5 w-1.5 rounded-full transition",
+            isPinned ? "bg-black" : "bg-white/40 group-hover/pin:bg-amber-100/80"
+          )}
+        />
+        {isPinned ? "Pinned" : "Pin"}
+      </span>
+    </button>
   );
 }
 
@@ -106,7 +139,6 @@ function pickStrongest(drivers: TopDriver[] | undefined, n = 2) {
 
 function pickConstraint(drivers: TopDriver[] | undefined) {
   const list = Array.isArray(drivers) ? drivers.slice() : [];
-  // High raw weight + low score = constraint signal
   const ranked = list
     .map((d) => {
       const w = typeof d.weightRaw === "number" ? d.weightRaw : 0;
@@ -120,7 +152,6 @@ function pickConstraint(drivers: TopDriver[] | undefined) {
 
   const w = best.weightRaw ?? 0;
   const s = best.score ?? 0;
-
   return w >= 45 && s <= 55 ? best : null;
 }
 
@@ -146,9 +177,17 @@ export function TierBoard({
         const meta = TIER_META[tier];
 
         return (
-          <section key={tier} className="panel p-5">
+          <section
+            key={tier}
+            className="panel p-5 shadow-[0_26px_100px_rgba(0,0,0,0.28)]"
+          >
             <div className="flex items-center gap-3">
-              <div className={cx("h-9 w-1.5 rounded-full", meta.accentBar)} />
+              <div
+                className={cx(
+                  "h-9 w-1.5 rounded-full shadow-[0_0_24px_rgba(255,255,255,0.14)]",
+                  meta.accentBar
+                )}
+              />
 
               <div className="flex min-w-0 items-center gap-2">
                 <span
@@ -160,10 +199,12 @@ export function TierBoard({
                 >
                   {meta.label}
                 </span>
-                <span className="truncate text-sm text-white/70">{meta.subtitle}</span>
+                <span className="truncate text-sm text-white/68">{meta.subtitle}</span>
               </div>
 
-              <div className="ml-auto text-xs font-semibold text-white/45">{list.length}</div>
+              <div className="ml-auto text-xs font-semibold text-white/38">
+                {list.length}
+              </div>
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -171,13 +212,10 @@ export function TierBoard({
                 const city = sc.city;
                 const isPinned = pinnedIds.includes(city.id);
                 const isSelected = selectedId === city.id;
-
                 const strongest = pickStrongest(sc.topDrivers, 2);
                 const constraint = pickConstraint(sc.topDrivers);
-
                 const primary = strongest[0]?.label ?? null;
                 const secondary = strongest[1]?.label ?? null;
-
                 const score = Math.round(sc.totalScore);
 
                 return (
@@ -193,51 +231,81 @@ export function TierBoard({
                       }
                     }}
                     className={cx(
-                      "rounded-3xl border border-white/10 bg-white/[0.04] backdrop-blur p-4 text-left",
-                      "shadow-[0_18px_60px_rgba(0,0,0,0.28)]",
-                      "transition hover:-translate-y-[1px] hover:border-white/15 hover:bg-white/[0.06]",
-                      "focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
-                      isSelected && "ring-2 ring-white/25"
+                      "group relative min-w-0 overflow-hidden rounded-[28px] border p-4 text-left transition duration-150 will-change-transform",
+                      "bg-[#070b12] shadow-[0_18px_70px_rgba(0,0,0,0.36)]",
+                      "hover:-translate-y-[1px] hover:border-white/18 hover:bg-[#090e18]",
+                      "active:scale-[0.998] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/22",
+                      isPinned
+                        ? "border-amber-100/26 ring-1 ring-amber-100/16"
+                        : "border-white/10",
+                      isSelected && "ring-2 ring-white/24"
                     )}
                   >
-                    {/* top row */}
-                    <div className="flex items-start gap-3">
+                    <div
+                      className={cx(
+                        "pointer-events-none absolute inset-x-0 top-0 h-px",
+                        isPinned
+                          ? "bg-[linear-gradient(to_right,rgba(251,191,36,0.62),rgba(255,255,255,0.28),transparent)]"
+                          : "bg-[linear-gradient(to_right,rgba(255,255,255,0.18),transparent)]"
+                      )}
+                    />
+
+                    {isPinned ? (
+                      <div className="pointer-events-none absolute right-0 top-0 h-24 w-36 bg-[radial-gradient(circle_at_top_right,rgba(251,191,36,0.11),transparent_62%)]" />
+                    ) : null}
+
+                    {/* Fixed header layout:
+                        City name gets its own row.
+                        Budget + pin get their own row.
+                        This prevents production builds from squeezing the city name away. */}
+                    <div className="relative min-w-0 space-y-3">
                       <div className="min-w-0">
-                        <div className="truncate text-base font-semibold text-white/90">{city.name}</div>
-                        <div className="truncate text-sm text-white/65">{city.country}</div>
+                        <div className="truncate text-base font-semibold tracking-tight text-white/92">
+                          {city.name}
+                        </div>
+                        <div className="mt-0.5 truncate text-sm text-white/56">
+                          {city.country}
+                        </div>
+
+                        {isPinned ? (
+                          <div className="mt-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100/70">
+                            Selected for compare
+                          </div>
+                        ) : null}
                       </div>
 
-                      <div className="ml-auto flex shrink-0 items-center gap-2">
-                        <BudgetBadge status={sc.budgetStatus} deltaUsd={sc.budgetDeltaUsd} />
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <BudgetBadge
+                          status={sc.budgetStatus}
+                          deltaUsd={sc.budgetDeltaUsd}
+                        />
 
                         {onTogglePin ? (
-                          <button
-                            type="button"
+                          <PinButton
+                            isPinned={isPinned}
                             onClick={(e) => {
                               e.stopPropagation();
                               onTogglePin(city.id);
                             }}
-                            className={cx(
-                              "ui-btn rounded-full px-2.5 py-1 text-xs font-semibold",
-                              isPinned ? "bg-white text-black" : "bg-white/10 text-white hover:bg-white/15"
-                            )}
-                            title={isPinned ? "Unpin" : "Pin to compare"}
-                          >
-                            {isPinned ? "Pinned" : "Pin"}
-                          </button>
+                          />
                         ) : null}
                       </div>
                     </div>
 
-                    {/* score emphasis */}
-                    <div className="mt-4 flex items-end justify-between gap-3">
+                    <div className="relative mt-5 flex items-end justify-between gap-3">
                       <div>
-                        <div className="text-[11px] font-semibold tracking-wide text-white/45">ALIGNMENT</div>
-                        <div className="mt-1 text-3xl font-semibold text-white">{score}</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/36">
+                          Alignment
+                        </div>
+                        <div className="mt-1 text-4xl font-semibold tracking-[-0.045em] text-white">
+                          {score}
+                        </div>
                       </div>
 
                       <div className="shrink-0 text-right">
-                        <div className="text-[11px] font-semibold text-white/45">TIER</div>
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/36">
+                          Tier
+                        </div>
                         <div
                           className={cx(
                             "mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
@@ -250,45 +318,67 @@ export function TierBoard({
                       </div>
                     </div>
 
-                    {/* rail */}
-                    <div className="mt-3">
-                      <div className={cx("h-1.5 w-full rounded-full", meta.railTint)}>
+                    <div className="relative mt-3">
+                      <div
+                        className={cx(
+                          "h-1.5 w-full overflow-hidden rounded-full",
+                          meta.railTint
+                        )}
+                      >
                         <div
-                          className={cx("h-1.5 rounded-full", meta.accentBar)}
-                          style={{ width: `${Math.max(2, Math.min(100, sc.totalScore))}%` }}
+                          className={cx(
+                            "h-1.5 rounded-full shadow-[0_0_18px_rgba(255,255,255,0.12)]",
+                            meta.accentBar
+                          )}
+                          style={{
+                            width: `${Math.max(2, Math.min(100, sc.totalScore))}%`,
+                          }}
                         />
                       </div>
                     </div>
 
-                    {/* contributors + causality */}
-                    <div className="mt-3 rounded-2xl border border-white/10 bg-black/20 p-3">
-                      <div className="text-[11px] font-semibold tracking-wide text-white/45">STRONGEST CONTRIBUTORS</div>
-                      <div className="mt-1 text-sm text-white/80">
+                    <div className="relative mt-3 rounded-2xl border border-white/9 bg-black/28 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]">
+                      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/36">
+                        Strongest contributors
+                      </div>
+
+                      <div className="mt-1 text-sm text-white/78">
                         {primary ? (
                           <>
                             {primary}
-                            {secondary ? <span className="text-white/45"> · </span> : null}
+                            {secondary ? (
+                              <span className="text-white/36"> · </span>
+                            ) : null}
                             {secondary ? secondary : null}
                           </>
                         ) : (
-                          <span className="text-white/55">—</span>
+                          <span className="text-white/45">—</span>
                         )}
                       </div>
 
-                      <div className="mt-2 text-[11px] leading-snug text-white/55">
+                      <div className="mt-2 text-[11px] leading-snug text-white/50">
                         {primary ? (
                           <>
-                            Driven by <span className="font-semibold text-white/70">{primary}</span>
+                            Driven by{" "}
+                            <span className="font-semibold text-white/68">
+                              {primary}
+                            </span>
                             {secondary ? (
                               <>
                                 {" "}
-                                and <span className="font-semibold text-white/70">{secondary}</span>
+                                and{" "}
+                                <span className="font-semibold text-white/68">
+                                  {secondary}
+                                </span>
                               </>
                             ) : null}
                             {constraint ? (
                               <>
                                 {" "}
-                                · Constraint: <span className="font-semibold text-white/70">{constraint.label}</span>
+                                · Constraint:{" "}
+                                <span className="font-semibold text-white/68">
+                                  {constraint.label}
+                                </span>
                               </>
                             ) : null}
                             .

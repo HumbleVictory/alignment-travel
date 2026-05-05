@@ -1,6 +1,5 @@
 // app/philosophy/page.tsx
 import Link from "next/link";
-import { TopTabs } from "@/components/TopTabs";
 import { H1, H2, P } from "@/components/Typography";
 
 function Card({
@@ -23,10 +22,7 @@ export default function PhilosophyPage() {
     <main className="min-h-[calc(100vh-72px)] bg-[radial-gradient(ellipse_at_top,rgba(16,185,129,0.10),transparent_45%),radial-gradient(ellipse_at_bottom,rgba(59,130,246,0.10),transparent_55%),linear-gradient(to_bottom,#05070a,#070b12,#05070a)] text-white">
       <div className="mx-auto max-w-6xl px-6 py-10">
         <div className="shell p-6 md:p-8">
-          <TopTabs />
-
-          <div className="mt-6 max-w-3xl">
-            {/* Added micro-label for consistency */}
+          <div className="max-w-3xl">
             <div className="text-xs font-medium tracking-wide text-emerald-200/80">
               PHILOSOPHY
             </div>
@@ -50,12 +46,13 @@ export default function PhilosophyPage() {
             </Card>
 
             <Card title="Auditable tradeoffs">
-              If a city wins, you can see exactly why (and what would need to change for it to lose).
+              If a city wins, you can see exactly why and what would need to change for it to lose.
             </Card>
           </div>
 
           <div className="mt-6 panel p-5">
             <H2 className="subhead-fix">The promise</H2>
+
             <P className="mt-2">
               Rankings are never manipulated. If you change priorities, the math changes — and
               the result changes — in a way you can verify.
