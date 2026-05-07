@@ -4,28 +4,34 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { PROFILES } from "@/data/profiles";
-import { DEFAULT_SETUP, loadSetup, saveSetup } from "@/lib/clientSetup";
+import {
+  DEFAULT_SETUP,
+  loadSetup,
+  saveSetup,
+  type SetupWeights,
+} from "@/lib/clientSetup";
 import { H1, P } from "@/components/Typography";
 
-type SetupWeights = {
-  food: number;
-  culture: number;
-  nightlife: number;
-  comfort: number;
-  cost: number;
-  safety: number;
-  shopping: number;
-  weather: number;
-  crowds: number;
-};
-
 const MONTHS = [
-  "January","February","March","April","May","June","July","August","September","October","November","December",
-];
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
 
 function clamp(n: number, lo: number, hi: number) {
+  if (!Number.isFinite(n)) return lo;
   return Math.max(lo, Math.min(hi, n));
 }
+
 function nOr(v: unknown, fallback: number) {
   const n = typeof v === "number" ? v : parseFloat(String(v ?? ""));
   return Number.isFinite(n) ? n : fallback;
@@ -41,107 +47,148 @@ function StepPill({ step, label }: { step: string; label: string }) {
   );
 }
 
+function SliderRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  onChange: (next: number) => void;
+}) {
+  return (
+    <label className="block rounded-2xl border border-white/10 bg-black/20 p-4">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="text-sm font-semibold text-white/85">{label}</span>
+        <span className="text-xs font-semibold text-white/45">{value}</span>
+      </div>
+
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(clamp(parseInt(e.target.value, 10), 0, 100))}
+        className="w-full"
+      />
+    </label>
+  );
+}
+
 export default function ConfigureSetupPage() {
   const [hydrated, setHydrated] = useState(false);
 
-  const [profileId, setProfileId] = useState<string>((DEFAULT_SETUP as any).profileId ?? "balanced");
-  const [month, setMonth] = useState<string>((DEFAULT_SETUP as any).month ?? "January");
-  const [budgetUsd, setBudgetUsd] = useState<number>(nOr((DEFAULT_SETUP as any).budgetUsd, 2500));
-  const [tripDays, setTripDays] = useState<number>(clamp(nOr((DEFAULT_SETUP as any).tripDays, 6), 1, 60));
+  const [profileId, setProfileId] = useState<string>(DEFAULT_SETUP.profileId);
+  const [budgetUsd, setBudgetUsd] = useState<number>(DEFAULT_SETUP.budgetUsd);
+  const [budgetUsdInput, setBudgetUsdInput] = useState<string>(String(DEFAULT_SETUP.budgetUsd));
+  const [month, setMonth] = useState<string>(DEFAULT_SETUP.month);
 
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  // Numeric saved value
+  const [tripDays, setTripDays] = useState<number>(
+    clamp(nOr((DEFAULT_SETUP as any).tripDays ?? (DEFAULT_SETUP as any).days, 5), 1, 60)
+  );
 
-  const [weights, setWeights] = useState<SetupWeights>({
-    food: 60,
-    culture: 60,
-    nightlife: 40,
-    comfort: 55,
-    cost: 50,
-    safety: 50,
-    shopping: 50,
-    weather: 50,
-    crowds: 50,
-  });
+  // String editing value so backspace can temporarily clear the field
+  const [tripDaysInput, setTripDaysInput] = useState<string>(
+    String(clamp(nOr((DEFAULT_SETUP as any).tripDays ?? (DEFAULT_SETUP as any).days, 5), 1, 60))
+  );
+
+  const [weights, setWeights] = useState<SetupWeights>(DEFAULT_SETUP.weights);
+  const [showTuning, setShowTuning] = useState(false);
 
   useEffect(() => {
     const s = loadSetup();
 
-    setProfileId((s as any).profileId ?? (DEFAULT_SETUP as any).profileId ?? "balanced");
-    setMonth((s as any).month ?? (DEFAULT_SETUP as any).month ?? "January");
-    setBudgetUsd(nOr((s as any).budgetUsd, nOr((DEFAULT_SETUP as any).budgetUsd, 2500)));
-    setTripDays(clamp(nOr((s as any).tripDays, 6), 1, 60));
+    const loadedBudget = clamp(nOr(s.budgetUsd, DEFAULT_SETUP.budgetUsd), 0, 1_000_000);
+    const loadedTripDays = clamp(
+      nOr((s as any).tripDays ?? (s as any).days, DEFAULT_SETUP.days),
+      1,
+      60
+    );
 
-    const w = (s as any).weights ?? {};
-    setWeights({
-      food: clamp(nOr(w.food, 60), 0, 100),
-      culture: clamp(nOr(w.culture, 60), 0, 100),
-      nightlife: clamp(nOr(w.nightlife, 40), 0, 100),
-      comfort: clamp(nOr(w.comfort, 55), 0, 100),
-      cost: clamp(nOr(w.cost, 50), 0, 100),
-      safety: clamp(nOr(w.safety, 50), 0, 100),
-      shopping: clamp(nOr(w.shopping, 50), 0, 100),
-      weather: clamp(nOr(w.weather, 50), 0, 100),
-      crowds: clamp(nOr(w.crowds, 50), 0, 100),
-    });
+    setProfileId(s.profileId);
+    setBudgetUsd(loadedBudget);
+    setBudgetUsdInput(String(loadedBudget));
+    setMonth(typeof s.month === "string" ? s.month : DEFAULT_SETUP.month);
+    setTripDays(loadedTripDays);
+    setTripDaysInput(String(loadedTripDays));
+    setWeights(s.weights ?? DEFAULT_SETUP.weights);
 
     setHydrated(true);
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
+
+    // Preserve newer setup sections like groupDynamic while editing Step 2
+    const curr = loadSetup();
+
     saveSetup({
+      ...curr,
       profileId,
-      month,
       budgetUsd,
+      month,
+      days: tripDays,
       tripDays,
       weights,
     } as any);
-  }, [hydrated, profileId, month, budgetUsd, tripDays, weights]);
+  }, [hydrated, profileId, budgetUsd, month, tripDays, weights]);
 
-  const profile = useMemo(() => {
-    return ((((PROFILES as any[]).find((p) => p?.id === profileId) ?? (PROFILES as any[])[0]) as any) ?? null);
+  const selectedProfile = useMemo(() => {
+    return (PROFILES as any[]).find((p) => p.id === profileId) ?? (PROFILES as any[])[0];
   }, [profileId]);
 
-  const isCustom = profileId === "custom";
+  function updateWeight<K extends keyof SetupWeights>(key: K, next: number) {
+    setProfileId("custom");
+    setWeights((prev) => ({
+      ...prev,
+      [key]: clamp(next, 0, 100),
+    }));
+  }
 
-  // keep mapping behavior for non-custom
-  useEffect(() => {
-    if (!hydrated) return;
-    if (isCustom) return;
+  function commitBudgetInput(raw: string) {
+    const trimmed = raw.trim();
 
-    const wp = (profile as any)?.weightsPct;
-    if (!wp) return;
+    if (trimmed === "") {
+      setBudgetUsd(0);
+      setBudgetUsdInput("");
+      return;
+    }
 
-    const cost = clamp(
-      Math.round(0.45 * nOr(wp.flight, 50) + 0.35 * nOr(wp.hotel, 50) + 0.2 * nOr(wp.diningValue, 50)),
-      0,
-      100
-    );
-    const food = clamp(Math.round(0.55 * nOr(wp.diningValue, 50) + 0.45 * nOr(wp.culinaryDensity, 50)), 0, 100);
-    const culture = clamp(Math.round(0.65 * nOr(wp.culinaryDensity, 50) + 0.35 * nOr(wp.safetyTransit, 50)), 0, 100);
-    const comfort = clamp(Math.round(0.6 * nOr(wp.hotel, 50) + 0.4 * nOr(wp.safetyTransit, 50)), 0, 100);
-    const nightlife = clamp(Math.round(0.7 * nOr(wp.diningValue, 50) + 0.3 * nOr(wp.shopping, 50)), 0, 100);
+    const parsed = parseInt(trimmed, 10);
+    const safe = clamp(Number.isFinite(parsed) ? parsed : 0, 0, 1_000_000);
 
-    const safety = clamp(Math.round(nOr(wp.safetyTransit, 50)), 0, 100);
-    const shopping = clamp(Math.round(nOr(wp.shopping, 50)), 0, 100);
-    const weather = clamp(Math.round(nOr(wp.weather, 50)), 0, 100);
-    const crowds = clamp(Math.round(nOr(wp.crowds, 50)), 0, 100);
+    setBudgetUsd(safe);
+    setBudgetUsdInput(String(safe));
+  }
 
-    setWeights({ food, culture, nightlife, comfort, cost, safety, shopping, weather, crowds });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, isCustom, profileId]);
+  function commitTripDaysInput(raw: string) {
+    const trimmed = raw.trim();
+
+    if (trimmed === "") {
+      setTripDays(1);
+      setTripDaysInput("1");
+      return;
+    }
+
+    const parsed = parseInt(trimmed, 10);
+    const safe = clamp(Number.isFinite(parsed) ? parsed : 1, 1, 60);
+
+    setTripDays(safe);
+    setTripDaysInput(String(safe));
+  }
 
   if (!hydrated) return null;
 
   return (
     <main className="min-h-[calc(100vh-72px)] bg-[radial-gradient(ellipse_at_top,rgba(16,185,129,0.10),transparent_45%),radial-gradient(ellipse_at_bottom,rgba(59,130,246,0.10),transparent_55%),linear-gradient(to_bottom,#05070a,#070b12,#05070a)] text-white">
       <div className="mx-auto max-w-6xl px-6 py-12">
-        {/* more top breathing room (fix for screenshot #1) */}
         <div className="shell p-8 md:p-10">
           <header className="flex flex-col gap-4">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <StepPill step="Step 2/2" label="Trip basics" />
+                <StepPill step="Step 2/3" label="Trip basics" />
                 <H1 className="mt-3 text-4xl md:text-6xl">Set trip basics.</H1>
                 <P className="mt-4">Budget + length first. Tuning stays optional.</P>
               </div>
@@ -155,179 +202,182 @@ export default function ConfigureSetupPage() {
             </div>
           </header>
 
-          <div className="mt-8 grid gap-5 lg:grid-cols-[420px_1fr]">
-            {/* Essentials (single-action feel) */}
+          <div className="mt-8 grid gap-5 lg:grid-cols-2">
             <section className="panel p-5">
               <div className="text-sm font-semibold text-white/85">Essentials</div>
 
               <div className="mt-5 space-y-4">
-                <div>
-                  <div className="text-xs font-medium text-white/55">Profile</div>
+                <label className="block">
+                  <div className="mb-2 text-sm font-semibold text-white/75">Profile</div>
                   <select
                     value={profileId}
                     onChange={(e) => setProfileId(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/85 outline-none focus:border-emerald-400/30"
+                    className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white/85 outline-none focus:border-emerald-400/30"
                   >
-                    {(PROFILES as any[]).map((p) => (
-                      <option key={p.id} value={p.id} className="text-black">
-                        {p.name}
+                    {(PROFILES as any[]).map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.name}
                       </option>
                     ))}
-                    {!((PROFILES as any[]).some((p) => p?.id === "custom")) ? (
-                      <option value="custom" className="text-black">
-                        Custom
-                      </option>
-                    ) : null}
                   </select>
-                  <div className="mt-2 text-[11px] text-white/55">{profile?.description ?? ""}</div>
-                </div>
 
-                <div>
-                  <div className="text-xs font-medium text-white/55">Total budget (USD)</div>
+                  <div className="mt-2 text-xs leading-relaxed text-white/45">
+                    {selectedProfile?.description ??
+                      "Choose a base profile, then optionally tune it below."}
+                  </div>
+                </label>
+
+                <label className="block">
+                  <div className="mb-2 text-sm font-semibold text-white/75">Total budget (USD)</div>
                   <input
                     type="number"
                     inputMode="numeric"
                     min={0}
-                    value={budgetUsd}
-                    onChange={(e) => setBudgetUsd(clamp(parseInt(e.target.value || "0", 10), 0, 1_000_000))}
-                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/85 outline-none placeholder:text-white/40 focus:border-emerald-400/30"
+                    max={1000000}
+                    value={budgetUsdInput}
+                    onChange={(e) => {
+                      setBudgetUsdInput(e.target.value);
+                    }}
+                    onBlur={(e) => {
+                      commitBudgetInput(e.target.value);
+                    }}
+                    className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white/85 outline-none focus:border-emerald-400/30"
                   />
-                </div>
+                </label>
 
-                <div>
-                  <div className="text-xs font-medium text-white/55">Trip length (days)</div>
+                <label className="block">
+                  <div className="mb-2 text-sm font-semibold text-white/75">Trip length (days)</div>
                   <input
                     type="number"
                     inputMode="numeric"
                     min={1}
                     max={60}
-                    value={tripDays}
-                    onChange={(e) => setTripDays(clamp(parseInt(e.target.value || "1", 10), 1, 60))}
-                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/85 outline-none placeholder:text-white/40 focus:border-emerald-400/30"
+                    value={tripDaysInput}
+                    onChange={(e) => {
+                      setTripDaysInput(e.target.value);
+                    }}
+                    onBlur={(e) => {
+                      commitTripDaysInput(e.target.value);
+                    }}
+                    className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white/85 outline-none focus:border-emerald-400/30"
                   />
-                </div>
+                </label>
 
-                <div>
-                  <div className="text-xs font-medium text-white/55">Month</div>
+                <label className="block">
+                  <div className="mb-2 text-sm font-semibold text-white/75">Month</div>
                   <select
                     value={month}
                     onChange={(e) => setMonth(e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/85 outline-none focus:border-emerald-400/30"
+                    className="w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-white/85 outline-none focus:border-emerald-400/30"
                   >
                     {MONTHS.map((m) => (
-                      <option key={m} value={m} className="text-black">
+                      <option key={m} value={m}>
                         {m}
                       </option>
                     ))}
                   </select>
-                </div>
+                </label>
 
                 <button
                   type="button"
-                  onClick={() => setShowAdvanced((v) => !v)}
-                  className="ui-btn inline-flex w-full items-center justify-center rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-semibold text-white/75 hover:border-white/20 hover:text-white/90"
+                  onClick={() => setShowTuning((v) => !v)}
+                  className="ui-btn w-full rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-semibold text-white/80 hover:border-white/20 hover:text-white"
                 >
-                  {showAdvanced ? "Hide tuning" : "Tuning (optional)"}
+                  {showTuning ? "Hide tuning" : "Tuning (optional)"}
                 </button>
 
-                <div className="text-[11px] text-white/45">Keep it simple. Only tune if you want to.</div>
+                <div className="text-xs text-white/40">Keep it simple. Only tune if you want to.</div>
               </div>
             </section>
 
-            {/* Tuning (optional) */}
             <section className="panel p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="text-sm font-semibold text-white/85">Tuning</div>
-                  <div className="mt-1 text-xs text-white/60">
-                    {showAdvanced ? (
-                      isCustom ? (
-                        <>Live edits.</>
-                      ) : (
-                        <>
-                          Locked by profile. Switch to <span className="font-semibold text-white/80">Custom</span> to edit.
-                        </>
-                      )
-                    ) : (
-                      <>Hidden by default.</>
-                    )}
+                  <div className="mt-1 text-xs text-white/45">
+                    {showTuning ? "Custom tuning is active." : "Hidden by default."}
                   </div>
                 </div>
-                <div className="text-xs text-white/45">0–100</div>
+
+                <div className="text-xs text-white/35">0–100</div>
               </div>
 
-              {!showAdvanced ? (
-                <div className="mt-5 rounded-3xl border border-white/10 bg-black/20 p-5 text-sm text-white/70">
+              {!showTuning ? (
+                <div className="mt-5 rounded-3xl border border-white/10 bg-black/20 p-5 text-sm text-white/60">
                   Optional. Outcomes already work great without tuning.
                 </div>
               ) : (
-                <div className="mt-5 space-y-4">
-                  {(
-                    [
-                      { key: "food", label: "Food" },
-                      { key: "culture", label: "Culture" },
-                      { key: "nightlife", label: "Nightlife" },
-                      { key: "comfort", label: "Comfort" },
-                      { key: "cost", label: "Cost sensitivity" },
-                      { key: "safety", label: "Safety" },
-                      { key: "shopping", label: "Shopping" },
-                      { key: "weather", label: "Weather" },
-                      { key: "crowds", label: "Low crowds" },
-                    ] as const
-                  ).map(({ key, label }) => {
-                    const v = weights[key];
-
-                    return (
-                      <div key={key} className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="text-sm font-semibold text-white/85">{label}</div>
-                          <div className="text-sm font-semibold text-white/80">{v}</div>
-                        </div>
-
-                        <input
-                          type="range"
-                          min={0}
-                          max={100}
-                          value={v}
-                          disabled={!isCustom}
-                          onChange={(e) => {
-                            const next = clamp(parseInt(e.target.value, 10), 0, 100);
-                            setWeights((prev) => ({ ...prev, [key]: next }));
-                          }}
-                          className={[
-                            "mt-3 w-full",
-                            isCustom ? "accent-emerald-500" : "opacity-60 cursor-not-allowed",
-                          ].join(" ")}
-                        />
-
-                        <div className="mt-2 text-[11px] text-white/50">
-                          {isCustom ? "Higher = matters more" : "Locked by profile"}
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="mt-5 grid gap-3">
+                  <SliderRow
+                    label="Cost"
+                    value={weights.cost}
+                    onChange={(next) => updateWeight("cost", next)}
+                  />
+                  <SliderRow
+                    label="Comfort"
+                    value={weights.comfort}
+                    onChange={(next) => updateWeight("comfort", next)}
+                  />
+                  <SliderRow
+                    label="Food"
+                    value={weights.food}
+                    onChange={(next) => updateWeight("food", next)}
+                  />
+                  <SliderRow
+                    label="Culture"
+                    value={weights.culture}
+                    onChange={(next) => updateWeight("culture", next)}
+                  />
+                  <SliderRow
+                    label="Nightlife"
+                    value={weights.nightlife}
+                    onChange={(next) => updateWeight("nightlife", next)}
+                  />
+                  <SliderRow
+                    label="Safety"
+                    value={weights.safety}
+                    onChange={(next) => updateWeight("safety", next)}
+                  />
+                  <SliderRow
+                    label="Shopping"
+                    value={weights.shopping}
+                    onChange={(next) => updateWeight("shopping", next)}
+                  />
+                  <SliderRow
+                    label="Weather"
+                    value={weights.weather}
+                    onChange={(next) => updateWeight("weather", next)}
+                  />
+                  <SliderRow
+                    label="Crowds"
+                    value={weights.crowds}
+                    onChange={(next) => updateWeight("crowds", next)}
+                  />
                 </div>
               )}
             </section>
           </div>
 
-          {/* Maserati-style sticky “Next” bar */}
           <div className="mt-8 sticky bottom-4 z-30">
             <div className="rounded-3xl border border-white/10 bg-black/55 backdrop-blur-xl shadow-[0_20px_80px_rgba(0,0,0,0.45)]">
               <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="text-xs text-white/55">Next: view outcomes and open layers only if you want depth.</div>
+                <div className="text-xs text-white/55">
+                  Next: add group context so alignment can account for comfort and logistics.
+                </div>
 
                 <Link
-                  href="/results"
-                  className="ui-btn ui-btn-accent rounded-2xl px-6 py-3 text-sm font-semibold text-center"
+                  href="/configure/group"
+                  className="ui-btn ui-btn-accent rounded-2xl px-6 py-3 text-center text-sm font-semibold"
                 >
-                  View outcomes
+                  Continue to group dynamic
                 </Link>
               </div>
             </div>
           </div>
 
-          <footer className="mt-10 text-xs text-white/35">© {new Date().getFullYear()} Alignment Travel</footer>
+          <footer className="mt-10 text-xs text-white/35">
+            © {new Date().getFullYear()} Alignment Travel
+          </footer>
         </div>
       </div>
     </main>

@@ -238,11 +238,22 @@ export default function ResultsClient() {
   const scored = useMemo(() => {
     return scoreCities(CITIES as any, profile as any, {
       budgetUsd: (setup as any).budgetUsd,
+      tripDays: (setup as any).tripDays ?? (setup as any).days,
+      groupDynamic: (setup as any).groupDynamic,
       visitedByCity,
       tripsByCity,
       feedbackByCity,
     });
-  }, [profile, (setup as any).budgetUsd, visitedByCity, tripsByCity, feedbackByCity]);
+  }, [
+    profile,
+    (setup as any).budgetUsd,
+    (setup as any).tripDays,
+    (setup as any).days,
+    (setup as any).groupDynamic,
+    visitedByCity,
+    tripsByCity,
+    feedbackByCity,
+  ]);
 
   // Keep pinned city references fresh after scores change.
   useEffect(() => {

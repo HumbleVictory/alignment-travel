@@ -70,7 +70,7 @@ export default function ConfigureProfilePage() {
         {/* extra top padding -> more “premium breathing room” */}
         <div className="shell p-8 md:p-10">
           <header className="flex flex-col gap-4">
-            <StepPill step="Step 1/2" label="Choose profile" />
+            <StepPill step="Step 1/3" label="Choose profile" />
             <div className="max-w-2xl">
               <H1 className="mt-2 text-4xl md:text-6xl">Choose a travel stance.</H1>
               <P className="mt-4">
