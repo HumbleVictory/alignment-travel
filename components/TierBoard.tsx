@@ -63,6 +63,16 @@ function cx(...xs: Array<string | false | null | undefined>) {
   return xs.filter(Boolean).join(" ");
 }
 
+function displayScoreOf(sc: ScoredCity) {
+  return Math.round(
+    Number((sc as any)?.displayScore ?? sc.totalScore ?? 0)
+  );
+}
+
+function displayTierOf(sc: ScoredCity): ScoredCity["tier"] {
+  return (((sc as any)?.displayTier ?? sc.tier ?? "C") as ScoredCity["tier"]);
+}
+
 function BudgetBadge({
   status,
   deltaUsd,
@@ -75,10 +85,12 @@ function BudgetBadge({
   const isOver = status === "over";
   const isWithin = status === "within";
   const label = isWithin ? "Within budget" : isOver ? "Overbudget" : "Underbudget";
+
   const num =
     typeof deltaUsd === "number" && Number.isFinite(deltaUsd)
       ? Math.round(Math.abs(deltaUsd))
       : null;
+
   const sub = num == null ? "" : isWithin ? `±$${num}` : `${isOver ? "+" : "-"}$${num}`;
 
   return (
@@ -139,10 +151,12 @@ function pickStrongest(drivers: TopDriver[] | undefined, n = 2) {
 
 function pickConstraint(drivers: TopDriver[] | undefined) {
   const list = Array.isArray(drivers) ? drivers.slice() : [];
+
   const ranked = list
     .map((d) => {
       const w = typeof d.weightRaw === "number" ? d.weightRaw : 0;
       const s = typeof d.score === "number" ? d.score : 0;
+
       return { d, v: w * (100 - s) };
     })
     .sort((a, b) => b.v - a.v);
@@ -152,6 +166,7 @@ function pickConstraint(drivers: TopDriver[] | undefined) {
 
   const w = best.weightRaw ?? 0;
   const s = best.score ?? 0;
+
   return w >= 45 && s <= 55 ? best : null;
 }
 
@@ -199,7 +214,10 @@ export function TierBoard({
                 >
                   {meta.label}
                 </span>
-                <span className="truncate text-sm text-white/68">{meta.subtitle}</span>
+
+                <span className="truncate text-sm text-white/68">
+                  {meta.subtitle}
+                </span>
               </div>
 
               <div className="ml-auto text-xs font-semibold text-white/38">
@@ -216,7 +234,9 @@ export function TierBoard({
                 const constraint = pickConstraint(sc.topDrivers);
                 const primary = strongest[0]?.label ?? null;
                 const secondary = strongest[1]?.label ?? null;
-                const score = Math.round(sc.totalScore);
+                const score = displayScoreOf(sc);
+                const displayTier = displayTierOf(sc);
+                const cardMeta = TIER_META[displayTier] ?? meta;
 
                 return (
                   <div
@@ -254,15 +274,12 @@ export function TierBoard({
                       <div className="pointer-events-none absolute right-0 top-0 h-24 w-36 bg-[radial-gradient(circle_at_top_right,rgba(251,191,36,0.11),transparent_62%)]" />
                     ) : null}
 
-                    {/* Fixed header layout:
-                        City name gets its own row.
-                        Budget + pin get their own row.
-                        This prevents production builds from squeezing the city name away. */}
                     <div className="relative min-w-0 space-y-3">
                       <div className="min-w-0">
                         <div className="truncate text-base font-semibold tracking-tight text-white/92">
                           {city.name}
                         </div>
+
                         <div className="mt-0.5 truncate text-sm text-white/56">
                           {city.country}
                         </div>
@@ -297,6 +314,7 @@ export function TierBoard({
                         <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/36">
                           Alignment
                         </div>
+
                         <div className="mt-1 text-4xl font-semibold tracking-[-0.045em] text-white">
                           {score}
                         </div>
@@ -306,14 +324,15 @@ export function TierBoard({
                         <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/36">
                           Tier
                         </div>
+
                         <div
                           className={cx(
                             "mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
-                            meta.tierPillBg,
-                            meta.tierPillText
+                            cardMeta.tierPillBg,
+                            cardMeta.tierPillText
                           )}
                         >
-                          {tier}
+                          {displayTier}
                         </div>
                       </div>
                     </div>
@@ -322,16 +341,16 @@ export function TierBoard({
                       <div
                         className={cx(
                           "h-1.5 w-full overflow-hidden rounded-full",
-                          meta.railTint
+                          cardMeta.railTint
                         )}
                       >
                         <div
                           className={cx(
                             "h-1.5 rounded-full shadow-[0_0_18px_rgba(255,255,255,0.12)]",
-                            meta.accentBar
+                            cardMeta.accentBar
                           )}
                           style={{
-                            width: `${Math.max(2, Math.min(100, sc.totalScore))}%`,
+                            width: `${Math.max(2, Math.min(100, score))}%`,
                           }}
                         />
                       </div>

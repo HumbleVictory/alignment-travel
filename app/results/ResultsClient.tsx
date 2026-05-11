@@ -1,7 +1,7 @@
 // app/results/ResultsClient.tsx
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -33,27 +33,173 @@ function useMediaQuery(query: string) {
   return matches;
 }
 
-type BudgetFilter = "all" | "within" | "under" | "over";
+type BudgetStatusFilter = "within" | "under" | "over";
 
-const RESULTS_FILTER_KEY = "results:budgetFilter:v1";
+type TopicLens =
+  | "cost"
+  | "comfort"
+  | "food"
+  | "culture"
+  | "nightlife"
+  | "safety"
+  | "shopping"
+  | "weather"
+  | "crowds";
 
-function loadBudgetFilter(): BudgetFilter {
-  if (typeof window === "undefined") return "all";
+type TopicFilter = "all" | TopicLens;
+
+const RESULTS_BUDGET_FILTER_KEY_OLD = "results:budgetFilter:v1";
+const RESULTS_BUDGET_FILTERS_KEY = "results:budgetFilters:v2";
+
+const RESULTS_TOPIC_FILTER_KEY_OLD = "results:topicFilter:v1";
+const RESULTS_TOPIC_FILTERS_KEY = "results:topicFilters:v2";
+
+const TOPIC_FILTERS: Array<{
+  id: TopicFilter;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: "all",
+    label: "All",
+    description: "Default alignment order.",
+  },
+  {
+    id: "cost",
+    label: "Cost",
+    description: "Best value across flights, hotels, and dining.",
+  },
+  {
+    id: "comfort",
+    label: "Comfort",
+    description: "Hotels, ease, weather, and lower-friction travel.",
+  },
+  {
+    id: "food",
+    label: "Food",
+    description: "Dining value and culinary density.",
+  },
+  {
+    id: "culture",
+    label: "Culture",
+    description: "A soft proxy using culinary depth, shopping, and practical ease.",
+  },
+  {
+    id: "nightlife",
+    label: "Nightlife",
+    description: "Food energy, dining value, and late-night momentum proxy.",
+  },
+  {
+    id: "safety",
+    label: "Safety",
+    description: "Safety and transit confidence.",
+  },
+  {
+    id: "shopping",
+    label: "Shopping",
+    description: "Retail value and luxury/contemporary shopping signal.",
+  },
+  {
+    id: "weather",
+    label: "Weather",
+    description: "Seasonal climate fit.",
+  },
+  {
+    id: "crowds",
+    label: "Crowds",
+    description: "Lower crowd pressure.",
+  },
+];
+
+function isBudgetStatusFilter(v: unknown): v is BudgetStatusFilter {
+  return v === "within" || v === "under" || v === "over";
+}
+
+function isTopicLens(v: unknown): v is TopicLens {
+  return (
+    v === "cost" ||
+    v === "comfort" ||
+    v === "food" ||
+    v === "culture" ||
+    v === "nightlife" ||
+    v === "safety" ||
+    v === "shopping" ||
+    v === "weather" ||
+    v === "crowds"
+  );
+}
+
+function uniqueBudgetFilters(values: unknown[]): BudgetStatusFilter[] {
+  const out: BudgetStatusFilter[] = [];
+
+  for (const value of values) {
+    if (isBudgetStatusFilter(value) && !out.includes(value)) out.push(value);
+  }
+
+  return out;
+}
+
+function uniqueTopicFilters(values: unknown[]): TopicLens[] {
+  const out: TopicLens[] = [];
+
+  for (const value of values) {
+    if (isTopicLens(value) && !out.includes(value)) out.push(value);
+  }
+
+  return out;
+}
+
+function loadBudgetFilters(): BudgetStatusFilter[] {
+  if (typeof window === "undefined") return [];
 
   try {
-    const v = window.localStorage.getItem(RESULTS_FILTER_KEY);
-    if (v === "within" || v === "under" || v === "over" || v === "all") return v;
-    return "all";
+    const raw = window.localStorage.getItem(RESULTS_BUDGET_FILTERS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return uniqueBudgetFilters(parsed);
+    }
+
+    // Back-compat with the older single-select setting.
+    const old = window.localStorage.getItem(RESULTS_BUDGET_FILTER_KEY_OLD);
+    return isBudgetStatusFilter(old) ? [old] : [];
   } catch {
-    return "all";
+    return [];
   }
 }
 
-function saveBudgetFilter(v: BudgetFilter) {
+function saveBudgetFilters(v: BudgetStatusFilter[]) {
   if (typeof window === "undefined") return;
 
   try {
-    window.localStorage.setItem(RESULTS_FILTER_KEY, v);
+    window.localStorage.setItem(RESULTS_BUDGET_FILTERS_KEY, JSON.stringify(uniqueBudgetFilters(v)));
+  } catch {
+    // ignore
+  }
+}
+
+function loadTopicFilters(): TopicLens[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const raw = window.localStorage.getItem(RESULTS_TOPIC_FILTERS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return uniqueTopicFilters(parsed);
+    }
+
+    // Back-compat with the older single-select setting.
+    const old = window.localStorage.getItem(RESULTS_TOPIC_FILTER_KEY_OLD);
+    return isTopicLens(old) ? [old] : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveTopicFilters(v: TopicLens[]) {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(RESULTS_TOPIC_FILTERS_KEY, JSON.stringify(uniqueTopicFilters(v)));
   } catch {
     // ignore
   }
@@ -64,6 +210,7 @@ function mapCustomToDriverWeightsPct(input: any): Record<DriverKey, number> {
   const cost = clamp(Number(input?.cost ?? 50), 0, 100);
   const comfort = clamp(Number(input?.comfort ?? 50), 0, 100);
   const food = clamp(Number(input?.food ?? 50), 0, 100);
+  const culture = clamp(Number(input?.culture ?? 50), 0, 100);
   const nightlife = clamp(Number(input?.nightlife ?? 50), 0, 100);
   const safety = clamp(Number(input?.safety ?? 50), 0, 100);
   const shoppingPref = clamp(Number(input?.shopping ?? 50), 0, 100);
@@ -74,9 +221,9 @@ function mapCustomToDriverWeightsPct(input: any): Record<DriverKey, number> {
     flight: 0.95 * cost,
     hotel: 0.75 * comfort + 0.65 * cost,
     diningValue: 0.7 * food + 0.55 * nightlife + 0.45 * cost,
-    culinaryDensity: 0.8 * food + 0.45 * nightlife,
-    shopping: 0.9 * shoppingPref + 0.35 * cost,
-    safetyTransit: 0.9 * safety + 0.35 * comfort,
+    culinaryDensity: 0.8 * food + 0.45 * nightlife + 0.35 * culture,
+    shopping: 0.9 * shoppingPref + 0.35 * cost + 0.25 * culture,
+    safetyTransit: 0.9 * safety + 0.35 * comfort + 0.2 * culture,
     weather: 1.0 * weatherPref + 0.15 * comfort,
     crowds: 1.0 * crowdsPref + 0.15 * comfort,
   };
@@ -103,7 +250,7 @@ function FilterPill({
   onClick: () => void;
   label: string;
   count?: number;
-  tone?: "neutral" | "emerald" | "rose";
+  tone?: "neutral" | "emerald" | "rose" | "gold";
 }) {
   const base = "rounded-full border px-3 py-1.5 text-xs font-semibold transition select-none";
 
@@ -112,7 +259,9 @@ function FilterPill({
       ? "border-rose-400/30 bg-rose-400/15 text-rose-50"
       : tone === "emerald"
         ? "border-emerald-400/30 bg-emerald-400/15 text-emerald-50"
-        : "border-white/25 bg-white/[0.06] text-white";
+        : tone === "gold"
+          ? "border-[#c8aa6e]/35 bg-[#c8aa6e]/12 text-[#f1dfb8]"
+          : "border-white/25 bg-white/[0.06] text-white";
 
   const idleCls =
     "border-white/10 bg-black/20 text-white/70 hover:border-white/20 hover:text-white/90 hover:bg-black/25";
@@ -136,12 +285,110 @@ function formatUsdDelta(n: unknown) {
   return `${n < 0 ? "-" : "+"}$${abs}`;
 }
 
-function scoreOf(city: ScoredCity) {
+function rawScoreOf(city: ScoredCity) {
   return Math.round(Number((city as any)?.totalScore ?? (city as any)?.score ?? 0));
 }
 
-function tierOf(city: ScoredCity) {
-  return String((city as any)?.tier ?? "C");
+function scoreOf(city: ScoredCity) {
+  return Math.round(
+    Number((city as any)?.displayScore ?? (city as any)?.totalScore ?? (city as any)?.score ?? 0)
+  );
+}
+
+function tierOf(city: ScoredCity): ScoredCity["tier"] {
+  const value = String((city as any)?.displayTier ?? (city as any)?.tier ?? "C");
+
+  if (value === "S" || value === "A" || value === "B" || value === "C" || value === "D") {
+    return value;
+  }
+
+  return "C";
+}
+
+function componentOf(city: ScoredCity, key: DriverKey) {
+  const value = Number((city as any)?.components?.[key] ?? 0);
+  return Number.isFinite(value) ? clamp(value, 0, 100) : 0;
+}
+
+function weightedAvg(parts: Array<[number, number]>) {
+  let total = 0;
+  let weight = 0;
+
+  for (const [value, w] of parts) {
+    if (!Number.isFinite(value) || !Number.isFinite(w) || w <= 0) continue;
+
+    total += value * w;
+    weight += w;
+  }
+
+  return weight > 0 ? total / weight : 0;
+}
+
+function topicScore(city: ScoredCity, topic: TopicLens) {
+  const flight = componentOf(city, "flight");
+  const hotel = componentOf(city, "hotel");
+  const diningValue = componentOf(city, "diningValue");
+  const culinaryDensity = componentOf(city, "culinaryDensity");
+  const shopping = componentOf(city, "shopping");
+  const safetyTransit = componentOf(city, "safetyTransit");
+  const weather = componentOf(city, "weather");
+  const crowds = componentOf(city, "crowds");
+
+  if (topic === "cost") {
+    return weightedAvg([
+      [flight, 0.4],
+      [hotel, 0.35],
+      [diningValue, 0.25],
+    ]);
+  }
+
+  if (topic === "comfort") {
+    return weightedAvg([
+      [hotel, 0.38],
+      [safetyTransit, 0.25],
+      [weather, 0.22],
+      [crowds, 0.15],
+    ]);
+  }
+
+  if (topic === "food") {
+    return weightedAvg([
+      [culinaryDensity, 0.58],
+      [diningValue, 0.42],
+    ]);
+  }
+
+  if (topic === "culture") {
+    return weightedAvg([
+      [culinaryDensity, 0.46],
+      [shopping, 0.24],
+      [safetyTransit, 0.18],
+      [crowds, 0.12],
+    ]);
+  }
+
+  if (topic === "nightlife") {
+    return weightedAvg([
+      [culinaryDensity, 0.45],
+      [diningValue, 0.35],
+      [shopping, 0.12],
+      [safetyTransit, 0.08],
+    ]);
+  }
+
+  if (topic === "safety") return safetyTransit;
+  if (topic === "shopping") return shopping;
+  if (topic === "weather") return weather;
+  if (topic === "crowds") return crowds;
+
+  return rawScoreOf(city);
+}
+
+function combinedTopicScore(city: ScoredCity, topics: TopicLens[]) {
+  if (!topics.length) return rawScoreOf(city);
+
+  const scores = topics.map((topic) => topicScore(city, topic));
+  return scores.reduce((a, b) => a + b, 0) / scores.length;
 }
 
 function budgetBadge(city: ScoredCity) {
@@ -180,45 +427,48 @@ function budgetBadge(city: ScoredCity) {
 }
 
 export default function ResultsClient() {
+  const comparePanelRef = useRef<HTMLElement | null>(null);
+
   const params = useSearchParams();
   const demo = params.get("demo") === "1";
 
-  /**
-   * Desktop/laptop keeps the right-side comparison panel.
-   * Mobile/tablet gets a full-screen comparison window.
-   */
   const useSidePanel = useMediaQuery("(min-width: 1180px)");
 
   const [hydrated, setHydrated] = useState(false);
 
-  // Modal
   const [selected, setSelected] = useState<ScoredCity | null>(null);
 
-  // Compare
   const [pinned, setPinned] = useState<ScoredCity[]>([]);
   const [compareOpen, setCompareOpen] = useState(false);
 
-  // Personalization
   const [visitedByCity, setVisitedByCity] = useState<Record<string, boolean>>({});
   const [tripsByCity, setTripsByCity] = useState<Record<string, number>>({});
   const [feedbackByCity, setFeedbackByCity] = useState<Record<string, CityFeedback>>({});
 
-  // Budget filter UI
-  const [budgetFilter, setBudgetFilter] = useState<BudgetFilter>("all");
+  const [budgetFilters, setBudgetFilters] = useState<BudgetStatusFilter[]>([]);
+  const [topicFilters, setTopicFilters] = useState<TopicLens[]>([]);
 
   const setup = useMemo(() => (demo ? DEFAULT_SETUP : loadSetup()), [demo]);
 
   useEffect(() => {
     setHydrated(true);
-    setBudgetFilter(demo ? "all" : loadBudgetFilter());
+    setBudgetFilters(demo ? [] : loadBudgetFilters());
+    setTopicFilters(demo ? [] : loadTopicFilters());
   }, [demo]);
 
   useEffect(() => {
     if (!hydrated) return;
     if (demo) return;
 
-    saveBudgetFilter(budgetFilter);
-  }, [hydrated, demo, budgetFilter]);
+    saveBudgetFilters(budgetFilters);
+  }, [hydrated, demo, budgetFilters]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    if (demo) return;
+
+    saveTopicFilters(topicFilters);
+  }, [hydrated, demo, topicFilters]);
 
   const profile: Profile = useMemo(() => {
     const base = ((PROFILES as any[]).find((p) => p?.id === setup.profileId) ??
@@ -255,7 +505,6 @@ export default function ResultsClient() {
     feedbackByCity,
   ]);
 
-  // Keep pinned city references fresh after scores change.
   useEffect(() => {
     setPinned((prev) => {
       if (!prev.length) return prev;
@@ -267,15 +516,6 @@ export default function ResultsClient() {
     });
   }, [scored]);
 
-  /**
-   * Desktop behavior:
-   * - 1 pinned city opens the right-side panel.
-   *
-   * Mobile behavior:
-   * - 1 pinned city does not auto-open the comparison.
-   * - User can still tap Compare (1/2) to open it.
-   * - 2 pinned cities auto-open the full-screen comparison window.
-   */
   useEffect(() => {
     if (!hydrated) return;
 
@@ -315,11 +555,42 @@ export default function ResultsClient() {
     return { within, under, over, unknown, all: scored.length };
   }, [scored]);
 
-  const visibleScored = useMemo(() => {
-    if (budgetFilter === "all") return scored;
+  const selectedTopicMetas = useMemo(() => {
+    return topicFilters
+      .map((id) => TOPIC_FILTERS.find((topic) => topic.id === id))
+      .filter(Boolean) as Array<(typeof TOPIC_FILTERS)[number]>;
+  }, [topicFilters]);
 
-    return scored.filter((s) => ((s as any).budgetStatus ?? "unknown") === budgetFilter);
-  }, [scored, budgetFilter]);
+  const topicLensLabel = useMemo(() => {
+    if (!selectedTopicMetas.length) return "All";
+    return selectedTopicMetas.map((topic) => topic.label).join(" + ");
+  }, [selectedTopicMetas]);
+
+  const topicLensDescription = useMemo(() => {
+    if (!selectedTopicMetas.length) return "Choose one or more topics to surface cities strongest in those areas.";
+    if (selectedTopicMetas.length === 1) return selectedTopicMetas[0].description;
+
+    return "Ranking cities by their combined strength across the selected topics.";
+  }, [selectedTopicMetas]);
+
+  const visibleScored = useMemo(() => {
+    const budgetFiltered =
+      budgetFilters.length === 0
+        ? scored
+        : scored.filter((s) => budgetFilters.includes(((s as any).budgetStatus ?? "unknown") as BudgetStatusFilter));
+
+    if (topicFilters.length === 0) return budgetFiltered;
+
+    return [...budgetFiltered].sort((a, b) => {
+      const topicDelta = combinedTopicScore(b, topicFilters) - combinedTopicScore(a, topicFilters);
+      if (Math.abs(topicDelta) > 1e-9) return topicDelta;
+
+      const scoreDelta = rawScoreOf(b) - rawScoreOf(a);
+      if (Math.abs(scoreDelta) > 1e-9) return scoreDelta;
+
+      return (a.city.name ?? "").localeCompare(b.city.name ?? "");
+    });
+  }, [scored, budgetFilters, topicFilters]);
 
   const tiers = useMemo(() => {
     const out: Record<"S" | "A" | "B" | "C" | "D", ScoredCity[]> = {
@@ -330,7 +601,7 @@ export default function ResultsClient() {
       D: [],
     };
 
-    for (const it of visibleScored) out[it.tier].push(it);
+    for (const it of visibleScored) out[tierOf(it)].push(it);
 
     return out;
   }, [visibleScored]);
@@ -345,6 +616,20 @@ export default function ResultsClient() {
 
   const compareCount = pinned.length;
   const compareVisible = compareCount > 0 && compareOpen;
+
+  function toggleBudgetFilter(next: BudgetStatusFilter) {
+    setBudgetFilters((prev) => {
+      if (prev.includes(next)) return prev.filter((item) => item !== next);
+      return [...prev, next];
+    });
+  }
+
+  function toggleTopicFilter(next: TopicLens) {
+    setTopicFilters((prev) => {
+      if (prev.includes(next)) return prev.filter((item) => item !== next);
+      return [...prev, next];
+    });
+  }
 
   function togglePin(it: ScoredCity) {
     const id = it.city.id;
@@ -364,7 +649,6 @@ export default function ResultsClient() {
       return;
     }
 
-    // If already two are pinned, replace the older slot and keep compare visible.
     setPinned([pinned[1], it]);
     setCompareOpen(true);
   }
@@ -379,18 +663,32 @@ export default function ResultsClient() {
     setSelected(city);
   }
 
-  /**
-   * Mobile modal reliability:
-   * showMobileCompare no longer depends on !useSidePanel.
-   * The mobile modal renders whenever comparison is open,
-   * then the portal condition keeps it mobile-only.
-   */
   const showCompare = hydrated && compareVisible;
   const showSideCompare = showCompare && useSidePanel;
   const showMobileCompare = showCompare;
   const shiftLeftPx = showSideCompare ? 390 : 0;
 
-  // Mobile only: lock the page behind the comparison window.
+  useEffect(() => {
+    if (!showSideCompare) return;
+
+    const onPointerDown = (event: PointerEvent) => {
+      const panel = comparePanelRef.current;
+      const target = event.target;
+
+      if (!panel) return;
+      if (!(target instanceof Node)) return;
+      if (panel.contains(target)) return;
+
+      if (target instanceof Element && target.closest("[data-compare-toggle='true']")) return;
+
+      setCompareOpen(false);
+    };
+
+    document.addEventListener("pointerdown", onPointerDown, true);
+
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [showSideCompare]);
+
   useEffect(() => {
     if (!showMobileCompare) return;
     if (useSidePanel) return;
@@ -403,7 +701,6 @@ export default function ResultsClient() {
     };
   }, [showMobileCompare, useSidePanel]);
 
-  // Mobile only: Escape closes the comparison window.
   useEffect(() => {
     if (!showMobileCompare) return;
     if (useSidePanel) return;
@@ -424,7 +721,7 @@ export default function ResultsClient() {
       <div
         className="mx-auto grid max-w-[1540px] gap-6 px-6 py-10"
         style={{
-          gridTemplateColumns: showSideCompare ? "minmax(0, 1120px) 360px" : "minmax(0, 1120px)",
+          gridTemplateColumns: "minmax(0, 1120px)",
           justifyContent: "center",
           alignItems: "start",
         }}
@@ -440,6 +737,7 @@ export default function ResultsClient() {
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
+                data-compare-toggle="true"
                 onClick={() => {
                   if (compareCount > 0) setCompareOpen(true);
                 }}
@@ -475,9 +773,7 @@ export default function ResultsClient() {
               <div className="space-y-4">
                 <div className="rounded-3xl border border-white/10 bg-black/35 shadow-[0_18px_60px_rgba(0,0,0,0.40)] backdrop-blur-md">
                   <div className="p-4">
-                    <div className="text-[11px] font-semibold tracking-wide text-white/45">
-                      CONFIGURATION
-                    </div>
+                    <div className="text-[11px] font-semibold tracking-wide text-white/45">CONFIGURATION</div>
 
                     <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                       <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 font-semibold text-white/80">
@@ -488,30 +784,22 @@ export default function ResultsClient() {
 
                       <span className="text-white/70">
                         Budget{" "}
-                        <span className="font-semibold text-white/85">
-                          {formatUsd((setup as any).budgetUsd)}
-                        </span>
+                        <span className="font-semibold text-white/85">{formatUsd((setup as any).budgetUsd)}</span>
                       </span>
 
                       <span className="text-white/35">·</span>
 
                       <span className="text-white/70">
-                        Month{" "}
-                        <span className="font-semibold text-white/85">{(setup as any).month}</span>
+                        Month <span className="font-semibold text-white/85">{(setup as any).month}</span>
                       </span>
                     </div>
 
                     <div className="mt-3 text-[11px] text-white/45">
-                      Showing{" "}
-                      <span className="font-semibold text-white/70">{visibleScored.length}</span>{" "}
+                      Showing <span className="font-semibold text-white/70">{visibleScored.length}</span>{" "}
                       {visibleScored.length === 1 ? "city" : "cities"}
                       {budgetCounts.unknown > 0 ? (
                         <span className="ml-2 text-white/35">
-                          ·{" "}
-                          <span className="font-semibold text-white/45">
-                            {budgetCounts.unknown}
-                          </span>{" "}
-                          unknown
+                          · <span className="font-semibold text-white/45">{budgetCounts.unknown}</span> unknown
                         </span>
                       ) : null}
                     </div>
@@ -519,52 +807,108 @@ export default function ResultsClient() {
                     <div className="mt-4 h-px w-full bg-white/10" />
 
                     <div className="mt-4">
-                      <div className="text-[11px] font-semibold tracking-wide text-white/45">
-                        BUDGET FILTER
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="text-[11px] font-semibold tracking-wide text-white/45">BUDGET FILTER</div>
+
+                        {budgetFilters.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setBudgetFilters([])}
+                            className="text-xs font-semibold text-white/45 transition hover:text-white/80"
+                            title="Reset budget filters"
+                          >
+                            Reset
+                          </button>
+                        ) : null}
                       </div>
 
                       <div className="mt-3 flex flex-wrap gap-2">
                         <FilterPill
-                          active={budgetFilter === "all"}
-                          onClick={() => setBudgetFilter("all")}
+                          active={budgetFilters.length === 0}
+                          onClick={() => setBudgetFilters([])}
                           label="All"
                           count={budgetCounts.all}
                         />
 
                         <FilterPill
-                          active={budgetFilter === "within"}
-                          onClick={() => setBudgetFilter("within")}
+                          active={budgetFilters.includes("within")}
+                          onClick={() => toggleBudgetFilter("within")}
                           label="Within"
                           count={budgetCounts.within}
                         />
 
                         <FilterPill
-                          active={budgetFilter === "under"}
-                          onClick={() => setBudgetFilter("under")}
+                          active={budgetFilters.includes("under")}
+                          onClick={() => toggleBudgetFilter("under")}
                           label="Under"
                           count={budgetCounts.under}
                           tone="emerald"
                         />
 
                         <FilterPill
-                          active={budgetFilter === "over"}
-                          onClick={() => setBudgetFilter("over")}
+                          active={budgetFilters.includes("over")}
+                          onClick={() => toggleBudgetFilter("over")}
                           label="Over"
                           count={budgetCounts.over}
                           tone="rose"
                         />
                       </div>
+                    </div>
 
-                      {budgetFilter !== "all" ? (
-                        <button
-                          type="button"
-                          onClick={() => setBudgetFilter("all")}
-                          className="mt-3 text-xs font-semibold text-white/55 hover:text-white/85"
-                          title="Reset filter"
-                        >
-                          Reset
-                        </button>
-                      ) : null}
+                    <div className="mt-4 h-px w-full bg-white/10" />
+
+                    <div className="mt-4">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="text-[11px] font-semibold tracking-wide text-white/45">TOPIC LENS</div>
+
+                        {topicFilters.length > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setTopicFilters([])}
+                            className="text-xs font-semibold text-white/45 transition hover:text-white/80"
+                            title="Reset topic lens"
+                          >
+                            Reset
+                          </button>
+                        ) : null}
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <FilterPill
+                          active={topicFilters.length === 0}
+                          onClick={() => setTopicFilters([])}
+                          label="All"
+                        />
+
+                        {TOPIC_FILTERS.filter((topic) => topic.id !== "all").map((topic) => (
+                          <FilterPill
+                            key={topic.id}
+                            active={topicFilters.includes(topic.id as TopicLens)}
+                            onClick={() => toggleTopicFilter(topic.id as TopicLens)}
+                            label={topic.label}
+                            tone="gold"
+                          />
+                        ))}
+                      </div>
+
+                      <div
+                        className={[
+                          "mt-3 rounded-2xl border p-3 text-xs leading-5",
+                          topicFilters.length > 0
+                            ? "border-[#c8aa6e]/15 bg-[#c8aa6e]/10 text-white/52"
+                            : "border-white/10 bg-black/15 text-white/38",
+                        ].join(" ")}
+                      >
+                        {topicFilters.length > 0 ? (
+                          <>
+                            Showing cities through a{" "}
+                            <span className="font-semibold text-[#f1dfb8]">{topicLensLabel}</span> lens.{" "}
+                            {topicLensDescription}
+                          </>
+                        ) : (
+                          topicLensDescription
+                        )}
+                      </div>
 
                       <Link
                         href="/methodology"
@@ -631,18 +975,26 @@ export default function ResultsClient() {
             />
           ) : null}
         </div>
-
-        {showCompare ? (
-          <aside className="hidden min-w-0 self-start min-[1180px]:sticky min-[1180px]:top-[88px] min-[1180px]:block">
-            <PinnedComparePanel
-              pinned={pinned}
-              onClear={clearPinned}
-              onClose={() => setCompareOpen(false)}
-              onSelect={handleCompareSelect}
-            />
-          </aside>
-        ) : null}
       </div>
+
+      {showSideCompare ? (
+        <aside
+          ref={comparePanelRef}
+          className="fixed z-50 hidden w-[420px] min-[1180px]:block"
+          style={{
+            top: 108,
+            right: 24,
+            bottom: 20,
+          }}
+        >
+          <PinnedComparePanel
+            pinned={pinned}
+            onClear={clearPinned}
+            onClose={() => setCompareOpen(false)}
+            onSelect={handleCompareSelect}
+          />
+        </aside>
+      ) : null}
 
       {showMobileCompare && !useSidePanel && typeof document !== "undefined"
         ? createPortal(
@@ -726,7 +1078,7 @@ function PinnedComparePanel({
 
   const diff = first && second ? scoreOf(first) - scoreOf(second) : 0;
 
-  const readout =
+  const leader =
     first && second
       ? diff === 0
         ? "Even match"
@@ -740,77 +1092,80 @@ function PinnedComparePanel({
   return (
     <div
       className={[
-        "relative w-full overflow-hidden rounded-[30px] border border-white/10 bg-[#06080c]",
-        "shadow-[0_30px_90px_rgba(0,0,0,0.62)] ring-1 ring-white/[0.05]",
-        compact ? "max-h-[calc(100svh-24px)] overflow-y-auto" : "max-h-[calc(100vh-112px)]",
+        "relative flex w-full flex-col overflow-hidden rounded-[32px] border border-white/[0.10] bg-[#05070b]",
+        "shadow-[0_34px_110px_rgba(0,0,0,0.82)] ring-1 ring-white/[0.045]",
+        compact ? "max-h-[calc(100svh-24px)]" : "h-full max-h-full",
       ].join(" ")}
     >
-      <div className="h-px bg-[linear-gradient(to_right,transparent,rgba(255,255,255,0.2),rgba(200,170,110,0.55),transparent)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_18%_0%,rgba(200,170,110,0.08),transparent_34%),linear-gradient(180deg,#070a0f_0%,#05070b_46%,#06080c_100%)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(to_right,transparent,rgba(255,255,255,0.22),rgba(200,170,110,0.62),transparent)]" />
 
-      <div className="relative border-b border-white/[0.08] bg-[#070a0f] p-5">
-        {compact ? (
+      <div className="relative border-b border-white/[0.08] bg-[#070a0f]/95 px-5 pb-5 pt-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#c8aa6e] shadow-[0_0_16px_rgba(200,170,110,0.62)]" />
+              <div className="text-[10px] font-semibold uppercase tracking-[0.26em] text-[#c8aa6e]/78">
+                Comparison console
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-end gap-3">
+              <div className="text-[42px] font-semibold leading-none tracking-[-0.075em] text-white">
+                {pinned.length}/2
+              </div>
+
+              <div className="pb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/34">
+                pinned
+              </div>
+            </div>
+          </div>
+
           <button
             type="button"
             onClick={onClose}
-            className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-lg leading-none text-white/70 transition hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-white/[0.10] bg-[#11161d] text-lg leading-none text-white/70 transition hover:border-white/[0.18] hover:bg-[#171e27] hover:text-white"
             aria-label="Close comparison"
+            title="Close comparison"
           >
             ×
           </button>
-        ) : null}
-
-        <div className="flex items-center gap-2 pr-12">
-          <span className="h-1.5 w-1.5 rounded-full bg-[#c8aa6e] shadow-[0_0_14px_rgba(200,170,110,0.55)]" />
-
-          <div className="text-[10px] font-semibold uppercase tracking-[0.24em] text-white/42">
-            Comparison
-          </div>
         </div>
 
-        <div className="mt-4 flex items-end justify-between gap-4">
-          <div>
-            <div className="text-[32px] font-semibold leading-none tracking-[-0.06em] text-white">
-              {pinned.length}/2
-            </div>
-
-            <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/34">
-              pinned
-            </div>
+        <div className="mt-4 rounded-[22px] border border-white/[0.08] bg-[#0b1017] p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/32">
+            Alignment spread
           </div>
 
-          <div className="max-w-[180px] rounded-full border border-white/10 bg-[#10151c] px-3 py-1.5 text-right text-[11px] font-semibold text-white/62">
-            {readout}
+          <div className="mt-2 flex items-center justify-between gap-4">
+            <div className="text-sm font-semibold text-white/82">
+              {first && second ? `${Math.abs(diff)} point${Math.abs(diff) === 1 ? "" : "s"}` : "Waiting"}
+            </div>
+
+            <div className="rounded-full border border-white/[0.08] bg-[#10151c] px-3 py-1.5 text-[11px] font-semibold text-white/58">
+              {leader}
+            </div>
           </div>
         </div>
-
-        {first && second ? (
-          <div className="mt-4 rounded-2xl border border-white/[0.08] bg-[#0b1017] px-3 py-3">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/32">
-              Alignment spread
-            </div>
-
-            <div className="mt-1 text-sm font-semibold text-white/76">
-              {Math.abs(diff)} points
-            </div>
-          </div>
-        ) : null}
       </div>
 
-      <div className="space-y-4 p-5">
-        {first ? (
-          <PinnedCompareSlot city={first} slot={1} onSelect={() => onSelect(first)} />
-        ) : (
-          <EmptyCompareSlot />
-        )}
+      <div className="relative flex-1 overflow-y-auto bg-[#05070b] p-5">
+        <div className="space-y-4">
+          {first ? (
+            <PinnedCompareSlot city={first} slot={1} onSelect={() => onSelect(first)} />
+          ) : (
+            <EmptyCompareSlot />
+          )}
 
-        {second ? (
-          <PinnedCompareSlot city={second} slot={2} onSelect={() => onSelect(second)} />
-        ) : (
-          <EmptyCompareSlot />
-        )}
+          {second ? (
+            <PinnedCompareSlot city={second} slot={2} onSelect={() => onSelect(second)} />
+          ) : (
+            <EmptyCompareSlot />
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 border-t border-white/[0.08] bg-[#05070a] p-5">
+      <div className="relative grid grid-cols-2 gap-3 border-t border-white/[0.08] bg-[#05070a] p-5">
         <ComparePanelButton onClick={onClear}>Clear</ComparePanelButton>
         <ComparePanelButton onClick={onClose}>Close</ComparePanelButton>
       </div>
@@ -830,7 +1185,19 @@ function PinnedCompareSlot({
   const budget = budgetBadge(city);
 
   return (
-    <div className="group relative w-full overflow-hidden rounded-[24px] border border-white/10 bg-[#0d1219] p-5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition hover:border-white/18 hover:bg-[#111821]">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      className="group relative w-full cursor-pointer overflow-hidden rounded-[26px] border border-white/[0.09] bg-[#0d1219] p-5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.045)] transition hover:border-[#c8aa6e]/35 hover:bg-[#111821] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c8aa6e]/35"
+      title={`Open ${city.city.name}`}
+    >
       <div
         className={[
           "absolute inset-y-4 left-0 w-[3px] rounded-r-full",
@@ -838,15 +1205,15 @@ function PinnedCompareSlot({
         ].join(" ")}
       />
 
-      <div className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(to_right,rgba(255,255,255,0.14),transparent)]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(to_right,rgba(255,255,255,0.14),rgba(200,170,110,0.18),transparent)]" />
 
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <div className="truncate text-[28px] font-semibold leading-none tracking-[-0.05em] text-white">
+          <div className="truncate text-[30px] font-semibold leading-none tracking-[-0.06em] text-white">
             {city.city.name}
           </div>
 
-          <div className="mt-2 truncate text-sm text-white/50">{city.city.country}</div>
+          <div className="mt-2 truncate text-sm font-medium text-white/50">{city.city.country}</div>
         </div>
 
         <div className="shrink-0 text-right">
@@ -854,7 +1221,7 @@ function PinnedCompareSlot({
             Alignment
           </div>
 
-          <div className="mt-2 text-[28px] font-semibold leading-none tracking-[-0.05em] text-white">
+          <div className="mt-2 text-[30px] font-semibold leading-none tracking-[-0.06em] text-white">
             {scoreOf(city)}
           </div>
         </div>
@@ -866,7 +1233,11 @@ function PinnedCompareSlot({
         <CompareBadge>Tier {tierOf(city)}</CompareBadge>
       </div>
 
-      <div className="mt-5 flex items-center justify-end">
+      <div className="mt-5 flex items-center justify-between gap-4">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/28">
+          Selected compare slot {slot}
+        </div>
+
         <button
           type="button"
           onClick={(e) => {
@@ -874,7 +1245,7 @@ function PinnedCompareSlot({
             e.stopPropagation();
             onSelect();
           }}
-          className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white/62 transition hover:border-[#c8aa6e]/35 hover:bg-[#c8aa6e]/10 hover:text-[#f1dfb8] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
+          className="rounded-full border border-white/[0.10] bg-white/[0.04] px-3 py-1.5 text-xs font-semibold text-white/62 transition hover:border-[#c8aa6e]/35 hover:bg-[#c8aa6e]/10 hover:text-[#f1dfb8] focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20"
         >
           Open →
         </button>
@@ -885,10 +1256,10 @@ function PinnedCompareSlot({
 
 function EmptyCompareSlot() {
   return (
-    <div className="relative w-full overflow-hidden rounded-[24px] border border-dashed border-white/10 bg-[#0a0e13] p-5 text-left">
-      <div className="absolute inset-x-0 top-0 h-px bg-[linear-gradient(to_right,rgba(255,255,255,0.08),transparent)]" />
+    <div className="relative w-full overflow-hidden rounded-[26px] border border-dashed border-white/[0.10] bg-[#0a0e13] p-5 text-left">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(to_right,rgba(255,255,255,0.08),transparent)]" />
 
-      <div className="text-base font-semibold text-white/70">Awaiting another city</div>
+      <div className="text-base font-semibold text-white/72">Awaiting another city</div>
 
       <div className="mt-2 text-sm leading-6 text-white/42">
         Pin another city from the board to complete the comparison.

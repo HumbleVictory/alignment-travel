@@ -164,8 +164,15 @@ export type ScoreOptions = {
 
 export type ScoredCity = {
   city: City;
+
+  // Raw/internal score. Used for ranking and model logic.
   totalScore: number; // 0..100
   tier: Tier;
+
+  // User-facing calibrated score. Used for visible score/tier presentation.
+  displayScore: number; // 0..100
+  displayTier: Tier;
+
   components: ScoreComponents; // each 0..100
   topDrivers: TopDriver[];
   highlights: string[];
@@ -260,6 +267,84 @@ function tierFromScore(totalScore: number): Tier {
   if (s >= 55) return "C";
 
   return "D";
+}
+
+function displayTierFromScore(displayScore: number): Tier {
+  const s = clamp0to100(displayScore);
+
+  if (s >= 92) return "S";
+  if (s >= 88) return "A";
+  if (s >= 80) return "B";
+  if (s >= 70) return "C";
+
+  return "D";
+}
+
+function displayScoreRawCurve(rawScore: number): number {
+  const s = clamp0to100(rawScore);
+
+  if (s >= 85) return 94 + (s - 85) * 0.25;
+  if (s >= 75) return 89 + (s - 75) * 0.5;
+  if (s >= 65) return 82 + (s - 65) * 0.7;
+  if (s >= 55) return 74 + (s - 55) * 0.8;
+  if (s >= 45) return 65 + (s - 45) * 0.9;
+
+  return 45 + s * 0.45;
+}
+
+function topDisplayTarget(bestRawScore: number): number {
+  const s = clamp0to100(bestRawScore);
+
+  if (s >= 85) return 96 + (s - 85) * 0.2;
+  if (s >= 75) return 94 + (s - 75) * 0.2;
+  if (s >= 65) return 91 + (s - 65) * 0.3;
+  if (s >= 55) return 86 + (s - 55) * 0.5;
+  if (s >= 45) return 78 + (s - 45) * 0.8;
+
+  return 62 + (s / 45) * 16;
+}
+
+function displayGapCompression(bestRawScore: number): number {
+  const s = clamp0to100(bestRawScore);
+
+  if (s >= 75) return 0.55;
+  if (s >= 65) return 0.62;
+  if (s >= 55) return 0.7;
+
+  return 0.85;
+}
+
+function displayScoreUpperBoundForRaw(rawScore: number): number {
+  const s = clamp0to100(rawScore);
+
+  if (s >= 75) return 99;
+  if (s >= 65) return 96;
+  if (s >= 55) return 90;
+  if (s >= 45) return 84;
+  if (s >= 35) return 76;
+
+  return 68;
+}
+
+function calibratedDisplayScore(rawScore: number, bestRawScore: number): number {
+  const raw = clamp0to100(rawScore);
+  const best = clamp0to100(bestRawScore);
+
+  const rawCurve = displayScoreRawCurve(raw);
+  const topTarget = topDisplayTarget(best);
+  const gap = Math.max(0, best - raw);
+  const compression = displayGapCompression(best);
+
+  const relativeScore = topTarget - gap * compression;
+
+  // Prevent truly weak raw fits from being over-promoted just because they appear
+  // in a weak result set.
+  const lowRawPenalty = Math.max(0, 45 - raw) * 0.35;
+
+  const calibrated = Math.max(rawCurve, relativeScore - lowRawPenalty);
+  const upperBound = displayScoreUpperBoundForRaw(raw);
+
+  return Math.round(clamp(calibrated, 0, Math.min(99, upperBound)));
 }
 
 const DRIVER_LABELS: Record<DriverKey, string> = {
@@ -705,6 +790,7 @@ export function scoreCities(cities: City[], profile: Profile, options?: ScoreOpt
     }
 
     const totalScore = clamp0to100(totalScoreBase - confidencePenalty + personalizationAdj + groupDynamicAdj);
+    const rawTier = tierFromScore(totalScore);
 
     const topDrivers: TopDriver[] = DRIVER_KEYS.map((k) => {
       const score = clamp0to100(nOr(components[k], 0));
@@ -739,7 +825,9 @@ export function scoreCities(cities: City[], profile: Profile, options?: ScoreOpt
     return {
       city,
       totalScore,
-      tier: tierFromScore(totalScore),
+      tier: rawTier,
+      displayScore: Math.round(totalScore),
+      displayTier: rawTier,
       components,
       topDrivers,
       highlights,
@@ -767,5 +855,15 @@ export function scoreCities(cities: City[], profile: Profile, options?: ScoreOpt
     return (a.city.name ?? "").localeCompare(b.city.name ?? "");
   });
 
-  return scored;
+  const bestRawScore = scored[0]?.totalScore ?? 0;
+
+  return scored.map((item) => {
+    const displayScore = calibratedDisplayScore(item.totalScore, bestRawScore);
+
+    return {
+      ...item,
+      displayScore,
+      displayTier: displayTierFromScore(displayScore),
+    };
+  });
 }

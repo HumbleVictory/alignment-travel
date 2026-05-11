@@ -66,6 +66,16 @@ function fmt1(n: number) {
   return (Math.round(n * 10) / 10).toFixed(1);
 }
 
+function displayScoreOf(selected: ScoredCity) {
+  return Math.round(
+    Number((selected as any)?.displayScore ?? (selected as any)?.totalScore ?? (selected as any)?.score ?? 0)
+  );
+}
+
+function displayTierOf(selected: ScoredCity): ScoredCity["tier"] {
+  return (((selected as any)?.displayTier ?? selected?.tier ?? "C") as ScoredCity["tier"]);
+}
+
 function normalizeWeightsPct(
   raw: Partial<Record<DriverKey, number>>
 ): Record<DriverKey, number> {
@@ -323,10 +333,10 @@ export function CityModal({
     [selected]
   );
 
-  const score = nOr((selected as any)?.totalScore, nOr((selected as any)?.score, 0));
+  const score = displayScoreOf(selected);
   const cityName = selected?.city?.name ?? "Destination";
   const cityCountry = selected?.city?.country ?? country ?? "";
-  const tier = selected?.tier ?? "C";
+  const tier = displayTierOf(selected);
 
   const ranked = React.useMemo(() => {
     return DRIVER_ORDER.map((k) => {
@@ -350,6 +360,10 @@ export function CityModal({
       className="fixed inset-0 z-[1300] overflow-hidden pointer-events-auto"
       onPointerDown={(e) => {
         e.stopPropagation();
+
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
       }}
       onClick={(e) => {
         e.stopPropagation();
@@ -660,7 +674,7 @@ function VerdictLayer({
           <DetailRow
             label="Crowds"
             value={Math.round(components.crowds)}
-            help="Higher = more crowded. Lower is quieter."
+            help="Higher = less crowded and easier to navigate."
           />
         </div>
       </SurfaceCard>
@@ -1230,7 +1244,7 @@ function DetailRow({ label, value, help }: { label: string; value: number; help:
 }
 
 function confidenceLabel(selected: ScoredCity) {
-  const c = (selected as any)?.confidence;
+  const c = (selected as any)?.explain?.confidence ?? (selected as any)?.confidence;
 
   if (typeof c === "number") {
     if (c >= 0.8) return "High confidence";
