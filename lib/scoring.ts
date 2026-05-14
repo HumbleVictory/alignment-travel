@@ -2,6 +2,9 @@
 // Safety-hardened scoring + independent weights (each 0–100, NOT sum-capped).
 // Internally we normalize by total weight only for computing a 0..100 totalScore.
 
+import type { CityPremiumInsight } from "@/data/cities";
+import type { TripStyleId } from "@/lib/tripStyles";
+
 export type Tier = "S" | "A" | "B" | "C" | "D";
 export type PersonalFeedback = "love" | "maybe" | "pass";
 
@@ -67,6 +70,8 @@ export type City = {
   id: string;
   name: string;
   country: string;
+  regionScope?: "domestic_us" | "international";
+  tripStyles?: TripStyleId[];
   region?: string;
   currency?: string;
 
@@ -113,6 +118,7 @@ export type City = {
   crowdsIndex?: number;
 
   highlights?: string[];
+  premiumInsight?: CityPremiumInsight;
 
   [k: string]: unknown;
 };
@@ -172,6 +178,13 @@ export type ScoredCity = {
   // User-facing calibrated score. Used for visible score/tier presentation.
   displayScore: number; // 0..100
   displayTier: Tier;
+
+  // Optional post-scoring recommendation layer. Base scoring remains `totalScore`.
+  baseAlignmentScore?: number;
+  baseDisplayScore?: number;
+  baseDisplayTier?: Tier;
+  recommendationScore?: number;
+  tripStyleAdjustment?: number;
 
   components: ScoreComponents; // each 0..100
   topDrivers: TopDriver[];

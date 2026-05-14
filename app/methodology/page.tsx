@@ -89,6 +89,32 @@ export default function MethodologyPage() {
             </Card>
           </div>
 
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            <Card title="Built for destination fit">
+              <P>
+                Alignment Travel optimizes for relative destination fit before
+                booking. It helps compare where to go, not sell a specific hotel,
+                flight, or itinerary.
+              </P>
+            </Card>
+
+            <Card title="Ranking integrity">
+              <P>
+                Current rankings are based on alignment logic, not paid placement.
+                Planning actions and decision-board labels help organize your process;
+                they do not change the score.
+              </P>
+            </Card>
+
+            <Card title="Planning estimates">
+              <P>
+                Hotel and flight ranges are planning estimates, not live booking
+                prices. Use them for relative comparison before checking real-time
+                availability.
+              </P>
+            </Card>
+          </div>
+
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
               href="/results?demo=1"

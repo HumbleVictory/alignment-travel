@@ -8,8 +8,10 @@ import {
   DEFAULT_SETUP,
   loadSetup,
   saveSetup,
+  type SetupTravelScope,
   type SetupWeights,
 } from "@/lib/clientSetup";
+import { TRIP_STYLE_OPTIONS, type TripStyleId } from "@/lib/tripStyles";
 import { H1, P } from "@/components/Typography";
 
 const MONTHS = [
@@ -82,6 +84,28 @@ const TOPICS: Array<{
   },
 ];
 
+const TRAVEL_SCOPE_OPTIONS: Array<{
+  id: SetupTravelScope;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: "domestic_us",
+    label: "Domestic — United States",
+    description: "Focus the recommendation set on U.S. destinations.",
+  },
+  {
+    id: "international",
+    label: "International",
+    description: "Consider destinations outside the United States.",
+  },
+  {
+    id: "both",
+    label: "Open to both",
+    description: "Keep domestic and international destinations in play.",
+  },
+];
+
 function clamp(n: number, lo: number, hi: number) {
   if (!Number.isFinite(n)) return lo;
   return Math.max(lo, Math.min(hi, n));
@@ -145,6 +169,15 @@ function topicButtonClass(active: boolean) {
     "group relative rounded-[22px] border p-4 text-left transition",
     active
       ? "border-emerald-400/30 bg-emerald-400/10 shadow-[0_18px_60px_rgba(16,185,129,0.08)]"
+      : "border-white/10 bg-black/20 hover:border-white/20 hover:bg-black/25",
+  ].join(" ");
+}
+
+function scopeButtonClass(active: boolean) {
+  return [
+    "rounded-[22px] border p-4 text-left transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300/25",
+    active
+      ? "border-[#c8aa6e]/35 bg-[#c8aa6e]/12 shadow-[0_18px_60px_rgba(200,170,110,0.08)]"
       : "border-white/10 bg-black/20 hover:border-white/20 hover:bg-black/25",
   ].join(" ");
 }
@@ -306,6 +339,8 @@ export default function ConfigureSetupPage() {
   const [budgetUsd, setBudgetUsd] = useState<number>(DEFAULT_SETUP.budgetUsd);
   const [budgetUsdInput, setBudgetUsdInput] = useState<string>(String(DEFAULT_SETUP.budgetUsd));
   const [month, setMonth] = useState<string>(DEFAULT_SETUP.month);
+  const [travelScope, setTravelScope] = useState<SetupTravelScope>(DEFAULT_SETUP.travelScope);
+  const [tripStyles, setTripStyles] = useState<TripStyleId[]>(DEFAULT_SETUP.tripStyles);
 
   // Numeric saved value
   const [tripDays, setTripDays] = useState<number>(
@@ -340,6 +375,8 @@ export default function ConfigureSetupPage() {
     setBudgetUsd(loadedBudget);
     setBudgetUsdInput(String(loadedBudget));
     setMonth(typeof s.month === "string" ? s.month : DEFAULT_SETUP.month);
+    setTravelScope(s.travelScope ?? DEFAULT_SETUP.travelScope);
+    setTripStyles(s.tripStyles ?? DEFAULT_SETUP.tripStyles);
     setTripDays(loadedTripDays);
     setTripDaysInput(String(loadedTripDays));
     setWeights(loadedWeights);
@@ -360,11 +397,13 @@ export default function ConfigureSetupPage() {
       profileId,
       budgetUsd,
       month,
+      travelScope,
+      tripStyles,
       days: tripDays,
       tripDays,
       weights,
     } as any);
-  }, [hydrated, profileId, budgetUsd, month, tripDays, weights]);
+  }, [hydrated, profileId, budgetUsd, month, travelScope, tripStyles, tripDays, weights]);
 
   const selectedProfile = useMemo(() => {
     return (PROFILES as any[]).find((p) => p.id === profileId) ?? (PROFILES as any[])[0];
@@ -392,6 +431,13 @@ export default function ConfigureSetupPage() {
     setProfileId("custom");
     setPriorityRank(nextRank);
     setWeights(rankToWeights(nextRank));
+  }
+
+  function toggleTripStyle(style: TripStyleId) {
+    setTripStyles((prev) => {
+      if (prev.includes(style)) return prev.filter((item) => item !== style);
+      return [...prev, style];
+    });
   }
 
   function addTopic(key: TopicKey) {
@@ -517,6 +563,101 @@ export default function ConfigureSetupPage() {
                       "Choose a base profile, then optionally tune it below."}
                   </div>
                 </label>
+
+                <div className="block">
+                  <div className="mb-2 text-sm font-semibold text-white/75">
+                    Where are you open to traveling?
+                  </div>
+                  <div className="text-xs leading-5 text-white/45">
+                    Choose the destination pool you want Alignment Travel to consider.
+                  </div>
+
+                  <div className="mt-3 grid gap-2">
+                    {TRAVEL_SCOPE_OPTIONS.map((option) => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setTravelScope(option.id)}
+                        className={scopeButtonClass(travelScope === option.id)}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold text-white/88">
+                              {option.label}
+                            </div>
+                            <div className="mt-1 text-xs leading-5 text-white/45">
+                              {option.description}
+                            </div>
+                          </div>
+
+                          <div
+                            className={[
+                              "mt-0.5 h-3 w-3 shrink-0 rounded-full border",
+                              travelScope === option.id
+                                ? "border-[#f1dfb8] bg-[#c8aa6e]"
+                                : "border-white/20 bg-white/[0.03]",
+                            ].join(" ")}
+                          />
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="mt-2 text-xs leading-5 text-white/38">
+                    Focus on U.S. destinations, international destinations, or keep
+                    both in play.
+                  </div>
+                </div>
+
+                <div className="block">
+                  <div className="mb-2 text-sm font-semibold text-white/75">
+                    What kind of trip are you trying to take?
+                  </div>
+                  <div className="text-xs leading-5 text-white/45">
+                    Choose the kind of trip you want the recommendations to favor.
+                  </div>
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {TRIP_STYLE_OPTIONS.map((option) => {
+                      const active = tripStyles.includes(option.id);
+
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => toggleTripStyle(option.id)}
+                          className={scopeButtonClass(active)}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-semibold text-white/88">
+                                {option.label}
+                              </div>
+                              <div className="mt-1 text-xs leading-5 text-white/45">
+                                {option.description}
+                              </div>
+                            </div>
+
+                            <div
+                              className={[
+                                "mt-0.5 h-3 w-3 shrink-0 rounded-full border",
+                                active
+                                  ? "border-[#f1dfb8] bg-[#c8aa6e]"
+                                  : "border-white/20 bg-white/[0.03]",
+                              ].join(" ")}
+                            />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-2 text-xs leading-5 text-white/38">
+                    This helps Alignment Travel explain which destinations best match
+                    the experience you are trying to create. When selected, it is
+                    applied after the base alignment score.
+                  </div>
+                </div>
 
                 <label className="block">
                   <div className="mb-2 text-sm font-semibold text-white/75">Total budget (USD)</div>

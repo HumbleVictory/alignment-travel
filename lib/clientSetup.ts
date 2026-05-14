@@ -1,5 +1,9 @@
 // lib/clientSetup.ts
+import { sanitizeTripStyles, type TripStyleId } from "@/lib/tripStyles";
+
 export type SetupProfileId = string;
+export type SetupTravelScope = "domestic_us" | "international" | "both";
+export type SetupTripStyle = TripStyleId;
 
 export type SetupWeights = {
   cost: number;
@@ -38,6 +42,8 @@ export type SetupState = {
   profileId: SetupProfileId;
   month: string;
   budgetUsd: number;
+  travelScope: SetupTravelScope;
+  tripStyles: SetupTripStyle[];
 
   // Primary trip length field.
   days: number;
@@ -77,6 +83,8 @@ export const DEFAULT_SETUP: SetupState = {
   profileId: "balanced",
   month: "January",
   budgetUsd: 2500,
+  travelScope: "both",
+  tripStyles: [],
   days: 5,
   tripDays: 5,
   groupDynamic: DEFAULT_GROUP_DYNAMIC,
@@ -122,6 +130,11 @@ function sanitizeTravelStyle(raw: unknown): GroupDynamicTravelStyle {
   return "solo";
 }
 
+function sanitizeTravelScope(raw: unknown): SetupTravelScope {
+  if (raw === "domestic_us" || raw === "international" || raw === "both") return raw;
+  return DEFAULT_SETUP.travelScope;
+}
+
 function sanitizeGroupDynamic(raw: any): SetupGroupDynamic {
   const travelStyle = sanitizeTravelStyle(raw?.travelStyle);
   const solo = travelStyle === "solo";
@@ -143,6 +156,8 @@ function sanitizeSetup(raw: any): SetupState {
   const profileId = typeof raw?.profileId === "string" ? raw.profileId : DEFAULT_SETUP.profileId;
   const month = typeof raw?.month === "string" ? raw.month : DEFAULT_SETUP.month;
   const budgetUsd = clamp(nOr(raw?.budgetUsd, DEFAULT_SETUP.budgetUsd), 0, 1_000_000);
+  const travelScope = sanitizeTravelScope(raw?.travelScope);
+  const tripStyles = sanitizeTripStyles(raw?.tripStyles);
 
   // Tolerate older saved states that may have either days or tripDays.
   const days = clamp(nOr(raw?.days, nOr(raw?.tripDays, DEFAULT_SETUP.days)), 1, 60);
@@ -151,6 +166,8 @@ function sanitizeSetup(raw: any): SetupState {
     profileId,
     month,
     budgetUsd,
+    travelScope,
+    tripStyles,
     days,
     tripDays: days,
     groupDynamic: sanitizeGroupDynamic(raw?.groupDynamic),

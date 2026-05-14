@@ -3,6 +3,9 @@
 
 import type { MouseEvent } from "react";
 import type { ScoredCity, TopDriver } from "@/lib/scoring";
+import type { TripStyleMatch } from "@/lib/tripStyles";
+
+type ShortlistStatus = "shortlist" | "maybe" | "not_this_trip";
 
 const TIER_ORDER: Array<ScoredCity["tier"]> = ["S", "A", "B", "C", "D"];
 
@@ -144,6 +147,78 @@ function PinButton({
   );
 }
 
+function shortlistLabel(status: ShortlistStatus) {
+  if (status === "shortlist") return "Saved";
+  if (status === "maybe") return "Maybe";
+  return "Pass";
+}
+
+function ShortlistPill({
+  cityId,
+  value,
+  current,
+  onSetStatus,
+}: {
+  cityId: string;
+  value: ShortlistStatus;
+  current: ShortlistStatus | null;
+  onSetStatus: (cityId: string, status: ShortlistStatus | null) => void;
+}) {
+  const active = current === value;
+
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onSetStatus(cityId, active ? null : value);
+      }}
+      className={cx(
+        "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-white/20",
+        active && value === "shortlist" && "border-emerald-300/24 bg-emerald-400/12 text-emerald-100",
+        active && value === "maybe" && "border-[#c8aa6e]/28 bg-[#c8aa6e]/12 text-[#f1dfb8]",
+        active && value === "not_this_trip" && "border-white/18 bg-white/[0.08] text-white/72",
+        !active && "border-white/[0.10] bg-black/24 text-white/46 hover:border-white/18 hover:text-white/72"
+      )}
+      title={`Mark ${shortlistLabel(value)}`}
+    >
+      {shortlistLabel(value)}
+    </button>
+  );
+}
+
+function ShortlistControls({
+  cityId,
+  status,
+  onSetStatus,
+}: {
+  cityId: string;
+  status: ShortlistStatus | null;
+  onSetStatus: (cityId: string, status: ShortlistStatus | null) => void;
+}) {
+  return (
+    <div className="relative mt-3 rounded-2xl border border-white/[0.08] bg-black/20 p-2">
+      <div className="mb-2 flex items-center justify-between gap-3 px-1">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/32">
+          Decision
+        </div>
+        {status ? (
+          <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/42">
+            {shortlistLabel(status)}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        <ShortlistPill cityId={cityId} value="shortlist" current={status} onSetStatus={onSetStatus} />
+        <ShortlistPill cityId={cityId} value="maybe" current={status} onSetStatus={onSetStatus} />
+        <ShortlistPill cityId={cityId} value="not_this_trip" current={status} onSetStatus={onSetStatus} />
+      </div>
+    </div>
+  );
+}
+
 function pickStrongest(drivers: TopDriver[] | undefined, n = 2) {
   const list = Array.isArray(drivers) ? drivers.slice() : [];
   return list.sort((a, b) => (b.points ?? 0) - (a.points ?? 0)).slice(0, n);
@@ -176,12 +251,18 @@ export function TierBoard({
   onSelect,
   onTogglePin,
   selectedId,
+  shortlistByCity = {},
+  onSetShortlistStatus,
+  tripStyleMatchByCity = {},
 }: {
   tiers: Record<ScoredCity["tier"], ScoredCity[]>;
   pinnedIds: string[];
   onSelect: (cityId: string) => void;
   onTogglePin?: (cityId: string) => void;
   selectedId?: string | null;
+  shortlistByCity?: Record<string, ShortlistStatus>;
+  onSetShortlistStatus?: (cityId: string, status: ShortlistStatus | null) => void;
+  tripStyleMatchByCity?: Record<string, TripStyleMatch>;
 }) {
   return (
     <div className="space-y-5">
@@ -230,6 +311,7 @@ export function TierBoard({
                 const city = sc.city;
                 const isPinned = pinnedIds.includes(city.id);
                 const isSelected = selectedId === city.id;
+                const shortlistStatus = shortlistByCity[city.id] ?? null;
                 const strongest = pickStrongest(sc.topDrivers, 2);
                 const constraint = pickConstraint(sc.topDrivers);
                 const primary = strongest[0]?.label ?? null;
@@ -237,6 +319,11 @@ export function TierBoard({
                 const score = displayScoreOf(sc);
                 const displayTier = displayTierOf(sc);
                 const cardMeta = TIER_META[displayTier] ?? meta;
+                const tripStyleMatch = tripStyleMatchByCity[city.id] ?? null;
+                const tripStyleTarget =
+                  tripStyleMatch?.matchedLabels.length
+                    ? tripStyleMatch.matchedLabels.slice(0, 2).join(", ")
+                    : tripStyleMatch?.selectedLabels.slice(0, 2).join(", ");
 
                 return (
                   <div
@@ -289,6 +376,12 @@ export function TierBoard({
                             Selected for compare
                           </div>
                         ) : null}
+
+                        {shortlistStatus ? (
+                          <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-100/62">
+                            {shortlistLabel(shortlistStatus)} decision
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -307,12 +400,44 @@ export function TierBoard({
                           />
                         ) : null}
                       </div>
+
+                      {tripStyleMatch ? (
+                        <div className="rounded-2xl border border-white/[0.08] bg-black/20 px-3 py-2 text-[11px] leading-5 text-white/50">
+                          <span className="font-semibold text-white/66">
+                            {tripStyleMatch.label} match for {tripStyleTarget}
+                          </span>
+                          {tripStyleMatch.influence === "boosted" ? (
+                            <span className="text-white/42">
+                              {" "}
+                              · Helps ranking
+                            </span>
+                          ) : tripStyleMatch.influence === "reduced" ? (
+                            <span className="text-white/42">
+                              {" "}
+                              · Ranking tempered
+                            </span>
+                          ) : (
+                            <span className="text-white/42">
+                              {" "}
+                              · Style fit reviewed
+                            </span>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
+
+                    {onSetShortlistStatus ? (
+                      <ShortlistControls
+                        cityId={city.id}
+                        status={shortlistStatus}
+                        onSetStatus={onSetShortlistStatus}
+                      />
+                    ) : null}
 
                     <div className="relative mt-5 flex items-end justify-between gap-3">
                       <div>
                         <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/36">
-                          Alignment
+                          {tripStyleMatch ? "Recommendation" : "Alignment"}
                         </div>
 
                         <div className="mt-1 text-4xl font-semibold tracking-[-0.045em] text-white">
